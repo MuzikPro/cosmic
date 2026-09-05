@@ -29,6 +29,9 @@ import {
 const BODY_CENTER = new THREE.Vector3(0, 0.15, 0);
 const BASE_RADIUS = 9.5;     // 经穴图默认机位距离
 const SAFE_RADIUS = 5.2;     // 人体（含手足）外接半径的安全裕量，× 体量
+/** 人体轮廓（臂微张）宽高比约 0.75；视口比它更窄（竖屏手机 ≈0.46）时按宽度定机位，
+ *  否则肩臂被裁到屏外，只剩躯干（owner 2026-09-05 实录：375×812 首屏）。0.85 留一点边。 */
+const BODY_ASPECT = 0.85;
 const TWO_PI = Math.PI * 2;
 const D2R = Math.PI / 180;
 /** App 换语言时整树重挂（App.tsx key={lang}）；面板开合跨重挂保留，切语言不丢面板 */
@@ -46,6 +49,7 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
   controlsRef: React.RefObject<{ target: THREE.Vector3; enabled: boolean; update: () => void }>;
 }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const size = useThree((s) => s.size);
   const t = useRef(0);
   const theta = useRef(0);     // 环绕累计方位角（速度变化不跳）
   const spin = useRef(0);      // 自转累计角
@@ -64,7 +68,9 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
     if (camera.fov !== s.camera.fov) { camera.fov = s.camera.fov; camera.updateProjectionMatrix(); }
 
     // ── 镜头目标位（两种模式都算：自转模式镜头驻正前方） ──
-    const radius = Math.max(BASE_RADIUS * s.camera.distance, SAFE_RADIUS * s.bodyScale);
+    // 竖屏按宽度退远：水平视场 = 垂直视场 × 宽高比，比例越窄需要的距离越远
+    const portraitFit = Math.max(1, BODY_ASPECT / Math.max(0.2, size.width / Math.max(1, size.height)));
+    const radius = Math.max(BASE_RADIUS * s.camera.distance, SAFE_RADIUS * s.bodyScale) * portraitFit;
     let elev = s.camera.elevation;
     let thetaNow: number;
     if (s.mode !== 'bodyRotation') {
@@ -274,7 +280,7 @@ function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang, standa
       <H text={tr('人体')} />
       <Row label={tr('体量')}><Slider value={s.bodyScale} min={0.6} max={1.6} step={0.02} format={pct}
         onChange={(v) => set((d) => ({ ...d, bodyScale: v }))} /></Row>
-      <Row label={tr('透明度')}><Slider value={s.bodyOpacity} min={0.05} max={0.4} step={0.01} format={(v) => v.toFixed(2)}
+      <Row label={tr('透明度')}><Slider value={s.bodyOpacity} min={0.05} max={0.6} step={0.01} format={(v) => v.toFixed(2)}
         onChange={(v) => set((d) => ({ ...d, bodyOpacity: v }))} /></Row>
 
       <H text={tr('经络气行')} />
@@ -414,6 +420,27 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
   };
   // 离开屏保时若仍全屏，退出全屏；不残留监听
   useEffect(() => () => { if (document.fullscreenElement) document.exitFullscreen?.(); }, []);
+
+  // ── 屏幕常亮：屏保在前台期间申请 Screen Wake Lock（免去改系统休眠设置）。
+  //    标签页隐藏时系统会自动释放，回到前台再申请；不支持的浏览器静默跳过。 ──
+  useEffect(() => {
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinel> } };
+    if (!nav.wakeLock) return;
+    let sentinel: WakeLockSentinel | null = null;
+    let disposed = false;
+    const acquire = async () => {
+      if (disposed || document.visibilityState !== 'visible') return;
+      try { sentinel = await nav.wakeLock!.request('screen'); } catch { sentinel = null; /* 低电量等策略拒绝 */ }
+    };
+    const onVis = () => { if (document.visibilityState === 'visible') void acquire(); };
+    void acquire();
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      disposed = true;
+      document.removeEventListener('visibilitychange', onVis);
+      void sentinel?.release().catch(() => undefined);
+    };
+  }, []);
 
   const { camera, lights } = THREE_DEFAULTS;
   const chip = (visible: boolean): React.CSSProperties => ({

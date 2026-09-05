@@ -12,7 +12,7 @@ export type RotationRange = 360 | 180 | 90 | 45;
 export interface ScreensaverSettings {
   mode: ViewMode;
   bodyScale: number;      // 0.6–1.6
-  bodyOpacity: number;    // 0.05–0.4
+  bodyOpacity: number;    // 0.05–0.6（owner 2026-09-05：上限 0.4→0.6，默认 0.16→0.38）
   flowSpeed: number;      // 0.05–1.0（经穴图 1.0 为基准）
   camera: {
     distance: number;     // 0.6–2.0（× 基准距离）
@@ -38,7 +38,7 @@ export const ALL_MERIDIANS = [...TWELVE, ...VESSELS_EIGHT];
 export const DEFAULT_SETTINGS: ScreensaverSettings = {
   mode: 'cameraOrbit',
   bodyScale: 1.0,
-  bodyOpacity: 0.16,
+  bodyOpacity: 0.38,
   flowSpeed: 0.1,
   camera: { distance: 1.0, fov: 45, orbitSpeed: 0.1, elevation: 8, inclination: 30, orbitStyle: 'spherical' },
   bodyRotation: { speed: 0.25, axisMode: 'xyzDrift', yaw: 0, pitch: 0, roll: 0, range: 360 },
@@ -62,7 +62,7 @@ export function loadSettings(): ScreensaverSettings {
   return {
     mode: pick(raw.mode, ['cameraOrbit', 'bodyRotation', 'combined'] as const, D.mode),
     bodyScale: num(raw.bodyScale, D.bodyScale, 0.6, 1.6),
-    bodyOpacity: num(raw.bodyOpacity, D.bodyOpacity, 0.05, 0.4),
+    bodyOpacity: num(raw.bodyOpacity, D.bodyOpacity, 0.05, 0.6),
     flowSpeed: num(raw.flowSpeed, D.flowSpeed, 0.05, 1),
     camera: {
       distance: num(c.distance, D.camera.distance, 0.6, 2),

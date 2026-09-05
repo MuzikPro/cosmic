@@ -10,3 +10,6 @@ dist-ssr/
 .vscode/
 .idea/
 coverage/
+
+# worktree-local browser launch config
+.claude/

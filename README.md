@@ -18,8 +18,25 @@ display, or full-screen as a screensaver.
   field of view 25–70°.
 - **Ambient UI** — the ⚙ and ⛶ controls fade after 4 s of stillness; the cursor hides.
   Drag to look around when "Manual interaction" is on; it eases back into motion.
+- **Stays awake** — while the page is visible it holds a Screen Wake Lock (where the
+  browser supports it), so the display doesn't sleep under it. Close the tab to release.
+- **Fits any screen** — portrait phones and tablets frame the whole body width-first;
+  landscape and ultrawide keep the default framing.
 - **English / 中文**, settings remembered locally (`3dqiflow:screensaver`), no accounts,
   no tracking.
+
+## Use it as a screensaver or live wallpaper
+
+- **Any browser** — press ⛶ (or F11 / ⌃⌘F) for fullscreen. The page keeps the screen awake.
+- **Phone / tablet home screen** — Safari or Chrome → *Add to Home Screen*. It launches
+  fullscreen without browser chrome (web app manifest, `display: fullscreen`).
+- **macOS desktop wallpaper** — [Plash](https://github.com/sindresorhus/Plash) (free, open
+  source) shows any URL as your wallpaper: add `https://cosmic.3dqiflow.com`.
+- **Windows** — [Lively Wallpaper](https://github.com/rocksdanister/lively) (free, open
+  source): *Add wallpaper → URL*. Wallpaper Engine users: *Open wallpaper → Web page*.
+- **Kiosk / wall display** — any Chromium in `--kiosk https://cosmic.3dqiflow.com`; a
+  Raspberry Pi 4/5 runs it at 1080p.
+- Native screensaver wrappers (macOS `.saver`, Electron) are on the wish-list — PRs welcome.
 
 ## Where it comes from
 

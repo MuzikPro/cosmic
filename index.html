@@ -3,7 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="canonical" href="https://cosmic.3dqiflow.com/" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- 屏保用途：加到主屏后以全屏无边框启动（manifest display:fullscreen）；
+         iOS 需要下面两条 apple-* 才会去掉 Safari 工具栏；theme-color 让浏览器边框跟随深色底。 -->
+    <meta name="theme-color" content="#0f0f1a" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cosmic Meridian" />
     <title>天人 · Cosmic Meridian — 12 meridians, ambient 3D screensaver</title>
     <meta name="description" content="A translucent body drifts in a starfield while the 12 meridians flow in slow qi. Camera orbit or body rotation, meridian picker, fullscreen. From 3DQiFlow." />
     <meta property="og:type" content="website" />

@@ -1,0 +1,17 @@
+{
+  "name": "天人 · Cosmic Meridian",
+  "short_name": "Cosmic Meridian",
+  "description": "The 12 meridians flowing on a translucent body in a starfield — an ambient 3D screensaver from 3DQiFlow.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#0f0f1a",
+  "theme_color": "#0f0f1a",
+  "lang": "en",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

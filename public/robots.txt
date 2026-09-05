@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://cosmic.3dqiflow.com/sitemap.xml
