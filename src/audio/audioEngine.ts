@@ -43,17 +43,38 @@ export function makeImpulse(ctx: BaseAudioContext, seconds = 8, decay = 3.2): Au
   return buf;
 }
 
+/**
+ * 更湿而不失"巨大合成器"的身体（owner 2026-09-05）：干声原样保留；湿路 = 直送混响 + 经乒乓延迟
+ * （0.71 s / 1.09 s，低通 2.4 kHz，反馈 0.38）再入混响——延迟给出氛围的"空间回声"，
+ * 长厅（12 s）给出尾巴；湿路上再切一点高频，让 pad 的存在感留在干路。
+ */
 export function buildGraph(ctx: BaseAudioContext, target: AudioNode = ctx.destination, masterGain = 0): AudioGraph {
   const input = ctx.createGain();
-  const dry = ctx.createGain(); dry.gain.value = 0.8;
-  const reverbSend = ctx.createGain(); reverbSend.gain.value = 0.55;
-  const reverb = ctx.createConvolver(); reverb.buffer = makeImpulse(ctx);
+  const dry = ctx.createGain(); dry.gain.value = 0.78;
+  const reverbSend = ctx.createGain(); reverbSend.gain.value = 0.95;
+  const reverb = ctx.createConvolver(); reverb.buffer = makeImpulse(ctx, 12, 2.6);
+  const wetTone = ctx.createBiquadFilter(); wetTone.type = 'highshelf'; wetTone.frequency.value = 3200; wetTone.gain.value = -4;
+  // 乒乓延迟网络
+  const dL = ctx.createDelay(2); dL.delayTime.value = 0.71;
+  const dR = ctx.createDelay(2); dR.delayTime.value = 1.09;
+  const fbL = ctx.createGain(); fbL.gain.value = 0.38;
+  const fbR = ctx.createGain(); fbR.gain.value = 0.38;
+  const lpL = ctx.createBiquadFilter(); lpL.type = 'lowpass'; lpL.frequency.value = 2400;
+  const lpR = ctx.createBiquadFilter(); lpR.type = 'lowpass'; lpR.frequency.value = 2400;
+  const merger = ctx.createChannelMerger(2);
+  const echoSend = ctx.createGain(); echoSend.gain.value = 0.5;
+  const echoLevel = ctx.createGain(); echoLevel.gain.value = 0.55;
+  input.connect(echoSend);
+  echoSend.connect(dL); dL.connect(lpL); lpL.connect(fbL); fbL.connect(dR);   // L → R
+  dR.connect(lpR); lpR.connect(fbR); fbR.connect(dL);                          // R → L
+  lpL.connect(merger, 0, 0); lpR.connect(merger, 0, 1);
+  merger.connect(echoLevel); echoLevel.connect(reverb);
   const limiter = ctx.createDynamicsCompressor();
   limiter.threshold.value = -12; limiter.knee.value = 12; limiter.ratio.value = 12;
   limiter.attack.value = 0.003; limiter.release.value = 0.25;
   const master = ctx.createGain(); master.gain.value = masterGain;
   input.connect(dry); dry.connect(limiter);
-  input.connect(reverbSend); reverbSend.connect(reverb); reverb.connect(limiter);
+  input.connect(reverbSend); reverbSend.connect(reverb); reverb.connect(wetTone); wetTone.connect(limiter);
   limiter.connect(master); master.connect(target);
   return { ctx, input, dry, reverbSend, reverb, limiter, master };
 }

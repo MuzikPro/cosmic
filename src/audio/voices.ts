@@ -82,10 +82,11 @@ export interface Drone { setGain(v: number, at: number, tc?: number): void; setM
 export function createDrone(ctx: BaseAudioContext, dest: AudioNode, midi: number, breathPeriod = 45): Drone {
   const f = midiToHz(midi);
   const o1 = ctx.createOscillator(); o1.type = 'sine'; o1.frequency.value = f;
+  // 二次谐波（~147 Hz）是基底里最"听得见"的成分（owner 2026-09-05：宫太可闻）——压到几乎没有
   const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2;
-  const g2 = ctx.createGain(); g2.gain.value = 0.18;
+  const g2 = ctx.createGain(); g2.gain.value = 0.04;
   const o3 = ctx.createOscillator(); o3.type = 'sine'; o3.frequency.value = f / 2;   // 更低一层的耳语
-  const g3 = ctx.createGain(); g3.gain.value = 0.35;
+  const g3 = ctx.createGain(); g3.gain.value = 0.5;
   const gain = ctx.createGain(); gain.gain.value = 0;
   // 呼吸：LFO 调制一个乘法增益 0.75–1
   const lfo = ctx.createOscillator(); lfo.type = 'sine'; lfo.frequency.value = 1 / breathPeriod;
