@@ -1,20 +1,50 @@
 # 天人 · Cosmic Meridian
 
-A single-page ambient site: a translucent human body floats in a starfield while the
-12 regular meridians (and, optionally, the 8 extraordinary vessels) flow in slow qi.
-Camera orbit, body rotation, or both; meridian picker; FOV; fullscreen. Settings persist
-locally under `3dqiflow:screensaver`.
+**https://cosmic.3dqiflow.com** — a translucent human body floats in a starfield while the
+twelve meridians flow in slow qi. Nothing to click; leave it on a second screen, a wall
+display, or full-screen as a screensaver.
 
-This is the Screensaver page of [3DQiFlow](https://www.3dqiflow.com) lifted into its own
-site. `src/components/Screensaver/`, `src/components/three/`, the body, the meridian
-registry and the data files are the same sources as the 3dqiflow repo — sync them from
-there rather than editing here.
+![Cosmic Meridian](public/og.png)
+
+## What it does
+
+- **Two motions, or both** — the camera orbits the body (horizontal · elevated · spherical
+  drift · free sphere), or the body turns on its own axis (Y · X · Z · three-axis drift ·
+  custom yaw/pitch/roll, full turn or ±180/90/45°), or both at once.
+- **Meridian picker** — the 12 regular meridians by default; add the 8 extraordinary
+  vessels (任/督/衝/帶/蹻/維) or narrow to hand/foot/yin/yang sixes, or single channels.
+- **Slow by design** — qi flow defaults to 0.1×, orbit 0.1× (one revolution ≈ 7 min), spin
+  0.25×. Everything is a slider: body size and transparency, camera distance, elevation,
+  field of view 25–70°.
+- **Ambient UI** — the ⚙ and ⛶ controls fade after 4 s of stillness; the cursor hides.
+  Drag to look around when "Manual interaction" is on; it eases back into motion.
+- **English / 中文**, settings remembered locally (`3dqiflow:screensaver`), no accounts,
+  no tracking.
+
+## Where it comes from
+
+This is the *Cosmic / 天人* page of [3DQiFlow](https://www.3dqiflow.com)
+([MuzikPro/3dqiflow](https://github.com/MuzikPro/3dqiflow)) lifted into a one-page site.
+The body (NIH Visible Human derived), the meridian polylines, the acupoint registry and
+the flow animation are the **same sources**; only `src/App.tsx` and `index.html` are
+specific to this site. Engine changes land in 3dqiflow first and are copied here —
+please open engine issues and PRs there.
+
+Meridian routes are schematic teaching geometry, not clinical landmarks: see
+[NOTICE.md](NOTICE.md) and [public/models/README.md](public/models/README.md) for
+provenance and licences.
+
+## Run it
 
 ```bash
 npm ci
 npm run dev      # http://localhost:5177
-npm run build
+npm run build    # dist/
 ```
 
-Educational only — not medical advice. Data provenance and licences: see `NOTICE.md`
-and `public/models/README.md`.
+Vite + React 18 + TypeScript + three.js (React Three Fiber). Needs WebGL2.
+
+## Not medical advice
+
+Educational and decorative. It does not diagnose, prescribe, or locate points for
+treatment. Licence: see [LICENSE](LICENSE).
