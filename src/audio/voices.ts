@@ -120,7 +120,7 @@ export function createBedChord(ctx: BaseAudioContext, dest: AudioNode, midis: nu
   const oscs: OscillatorNode[] = [lfo];
   midis.forEach((m, i) => {
     const f = midiToHz(m);
-    const pan = ctx.createStereoPanner(); pan.pan.value = (i - 1) * width * 0.6;
+    const pan = ctx.createStereoPanner(); pan.pan.value = midis.length > 1 ? ((i / (midis.length - 1)) * 2 - 1) * width * 0.6 : 0;
     const vg = ctx.createGain(); vg.gain.value = 0.16;
     const mk = (type: OscillatorType, ratio: number, g: number) => {
       const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * ratio;
