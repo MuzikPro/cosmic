@@ -3,6 +3,7 @@
  * 键 3dqiflow:screensaver；缺项按默认补齐，坏值不炸。
  */
 import { TWELVE, VESSELS_EIGHT } from '../Acupoints/pointGeometry';
+import { DEFAULT_TEMPORAL_SETTINGS, TemporalSoundscapeSettings } from '@/temporal/types';
 
 export type ViewMode = 'cameraOrbit' | 'bodyRotation' | 'combined';
 export type OrbitStyle = 'horizontal' | 'elevated' | 'spherical' | 'free';
@@ -31,6 +32,8 @@ export interface ScreensaverSettings {
   manualInteraction: boolean;
   /** 显示的经络代码（十二正经 + 奇经八脉子集）；空数组＝只留人体 */
   visible: string[];
+  /** 时间与声音（时辰经络音景，owner 2026-09-05）：默认关闭；关闭时不影响原有无时间维度的演示 */
+  temporal: TemporalSoundscapeSettings;
 }
 
 export const ALL_MERIDIANS = [...TWELVE, ...VESSELS_EIGHT];
@@ -43,7 +46,8 @@ export const DEFAULT_SETTINGS: ScreensaverSettings = {
   camera: { distance: 1.0, fov: 45, orbitSpeed: 0.1, elevation: 8, inclination: 30, orbitStyle: 'spherical' },
   bodyRotation: { speed: 0.25, axisMode: 'xyzDrift', yaw: 0, pitch: 0, roll: 0, range: 360 },
   manualInteraction: false,
-  visible: TWELVE   // 默认只显十二正经；奇经八脉在设置里勾选
+  visible: TWELVE,  // 默认只显十二正经；奇经八脉在设置里勾选
+  temporal: DEFAULT_TEMPORAL_SETTINGS
 };
 
 const KEY = '3dqiflow:screensaver';
@@ -81,7 +85,28 @@ export function loadSettings(): ScreensaverSettings {
     manualInteraction: raw.manualInteraction === true,
     visible: Array.isArray(raw.visible)
       ? ALL_MERIDIANS.filter((c) => (raw.visible as unknown[]).includes(c))
-      : D.visible
+      : D.visible,
+    temporal: sanitizeTemporal(raw.temporal)
+  };
+}
+
+export function sanitizeTemporal(v: unknown): TemporalSoundscapeSettings {
+  const t = (v && typeof v === 'object' ? v : {}) as Partial<TemporalSoundscapeSettings>;
+  const DT = DEFAULT_TEMPORAL_SETTINGS;
+  return {
+    enabled: t.enabled === true,
+    timeSource: pick(t.timeSource, ['LOCAL_REAL_TIME', 'MANUAL_SHICHEN', 'PREVIEW_24H_CYCLE'] as const, DT.timeSource),
+    manualIndex: Math.round(num(t.manualIndex, DT.manualIndex, 0, 11)),
+    previewCycleMinutes: num(t.previewCycleMinutes, DT.previewCycleMinutes, 1, 60),
+    transitionMinutes: pick(t.transitionMinutes, [5, 10, 15, 20] as const, DT.transitionMinutes),
+    masterVolume: num(t.masterVolume, DT.masterVolume, 0, 0.7),
+    musicDensity: num(t.musicDensity, DT.musicDensity, 0, 1),
+    tonalCenterMidi: num(t.tonalCenterMidi, DT.tonalCenterMidi, 36, 72),
+    octaveBias: num(t.octaveBias, DT.octaveBias, -1, 1),
+    spatialMode: pick(t.spatialMode, ['OFF', 'SUBTLE', 'FULL'] as const, DT.spatialMode),
+    vesselModulation: t.vesselModulation !== false,
+    overlay: pick(t.overlay, ['OFF', 'MINIMAL', 'DETAILED'] as const, DT.overlay),
+    visualEmphasis: num(t.visualEmphasis, DT.visualEmphasis, 0, 1)
   };
 }
 

@@ -15,6 +15,11 @@ import {
   ScreensaverSettings, DEFAULT_SETTINGS, ALL_MERIDIANS, loadSettings, saveSettings,
   OrbitStyle, AxisMode, RotationRange, ViewMode
 } from './screensaverSettings';
+import { MERIDIAN_CLOCK, FIVE_TONES } from '@/data/meridianClock';
+import { temporalStore, useTemporalState } from '@/temporal/temporalStore';
+import { meridianWeights, emphasisScale } from '@/temporal/shichen';
+import type { TemporalMeridianState, TemporalSoundscapeSettings, TimeSource, OverlayMode } from '@/temporal/types';
+import { TemporalOverlay } from './TemporalOverlay';
 
 /**
  * 宇宙经络 · 屏保（owner 2026-09-05）——一具透明人体悬在星空中央，十二正经与
@@ -150,27 +155,68 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
   return null;
 }
 
+type EmphasisRefs = Map<string, { v: number }>;
+/** 奇经不入钟面：时辰模式下按 0.3 权重轻微退后，保持"整个经络身体都在" */
+const VESSEL_WEIGHT = 0.3;
+
+/**
+ * 时辰侧重驱动（Canvas 内）：订阅时辰状态（每秒一变），逐帧把每条经的目标系数
+ * 阻尼逼近。关闭时目标恒为 1——线与光点回到原样，无时间维度的演示不受影响。
+ */
+function TemporalDriver({ refs, settingsRef }: {
+  refs: EmphasisRefs; settingsRef: React.MutableRefObject<ScreensaverSettings>;
+}) {
+  const weights = useRef<Record<string, number> | null>(null);
+  // 开发期可从控制台读到每条经的实时系数（生产构建中 import.meta.env.DEV 为 false，整段被消除）
+  useEffect(() => {
+    if (import.meta.env.DEV) (window as unknown as { __cosmicEmphasis?: EmphasisRefs }).__cosmicEmphasis = refs;
+  }, [refs]);
+  useEffect(() => {
+    const apply = () => {
+      const st: TemporalMeridianState | null = temporalStore.getSnapshot();
+      weights.current = st ? meridianWeights(st) : null;
+    };
+    apply();
+    return temporalStore.subscribe(apply);
+  }, []);
+  useFrame((_, delta) => {
+    const dt = Math.min(delta, 0.1);
+    const k = 1 - Math.exp(-dt * 1.5);
+    const w = weights.current;
+    const e = settingsRef.current.temporal.visualEmphasis;
+    refs.forEach((ref, code) => {
+      const target = w ? emphasisScale(w[code] ?? VESSEL_WEIGHT, e) : 1;
+      ref.v += (target - ref.v) * k;
+    });
+  });
+  return null;
+}
+
 /** 人体 + 全部经络：同一 rig 组（自转/缩放一起动） */
-function BodyRig({ rigRef, opacity, flowRef, visible }: {
+function BodyRig({ rigRef, opacity, flowRef, visible, emphasis }: {
   rigRef: React.RefObject<THREE.Group>; opacity: number; flowRef: { v: number }; visible: string[];
+  emphasis: EmphasisRefs;
 }) {
   return (
     <group ref={rigRef}>
       <Suspense fallback={<BodyFigure opacity={0.2} />}>
         <BodyMesh variant="atlas" sex="male" opacity={opacity} />
       </Suspense>
-      {visible.map((code) => (
-        <group key={code}>
-          <MeridianLine code={code} mirrored={false} dim={false} sex="male" radiusScale={1.15} brightness={1.2} />
-          <QiFlow code={code} mirrored={false} speed={1} sex="male" size={0.06} speedRef={flowRef} />
-          {!NO_MIRROR.has(code) && (
-            <>
-              <MeridianLine code={code} mirrored dim={false} sex="male" radiusScale={1.15} brightness={1.2} />
-              <QiFlow code={code} mirrored speed={1} sex="male" size={0.06} speedRef={flowRef} />
-            </>
-          )}
-        </group>
-      ))}
+      {visible.map((code) => {
+        const em = emphasis.get(code);
+        return (
+          <group key={code}>
+            <MeridianLine code={code} mirrored={false} dim={false} sex="male" radiusScale={1.15} brightness={1.2} emphasisRef={em} />
+            <QiFlow code={code} mirrored={false} speed={1} sex="male" size={0.06} speedRef={flowRef} emphasisRef={em} />
+            {!NO_MIRROR.has(code) && (
+              <>
+                <MeridianLine code={code} mirrored dim={false} sex="male" radiusScale={1.15} brightness={1.2} emphasisRef={em} />
+                <QiFlow code={code} mirrored speed={1} sex="male" size={0.06} speedRef={flowRef} emphasisRef={em} />
+              </>
+            )}
+          </group>
+        );
+      })}
     </group>
   );
 }
@@ -253,6 +299,70 @@ function MeridianPicker({ visible, onChange }: { visible: string[]; onChange: (v
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>{TWELVE.map(chip)}</div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>{['CV', 'GV', ...VESSEL_SIX].map(chip)}</div>
     </div>
+  );
+}
+
+/** 面板里的一行"此刻"：自己订阅时辰状态，父面板不因每秒一变而重渲 */
+function TemporalNowLine() {
+  const st = useTemporalState();
+  if (!st) return null;
+  const e = st.entry;
+  return (
+    <div style={{ fontSize: '10px', color: UI.textSecondary, letterSpacing: '1px' }}>
+      {tr('此刻')} · {e.shichen} {e.pinyin} · {tr(e.organ)} · {FIVE_TONES[e.tone].zh} {FIVE_TONES[e.tone].pinyin}
+      {st.transition ? ` · ${tr('过渡中')}` : ''}
+    </div>
+  );
+}
+
+/**
+ * 时间与声音（时辰经络音景）设置：一个总开关之后才展开；关闭时不产生任何时间维度逻辑。
+ * 第一波：时间来源 / 过渡 / 叠层 / 视觉侧重；音量与密度随音频层（第四阶段）一起出现。
+ */
+function TimeAndSoundSection({ t, setT }: { t: TemporalSoundscapeSettings; setT: (patch: Partial<TemporalSoundscapeSettings>) => void }) {
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  return (
+    <>
+      <button style={{ ...toggleButtonStyle(t.enabled), fontSize: '10px', padding: '3px 8px', textAlign: 'left' }}
+              onClick={() => setT({ enabled: !t.enabled })}>
+        {tr('时辰经络音景')}{t.enabled ? ' · ON' : ' · OFF'}
+      </button>
+      {t.enabled && (
+        <>
+          <Row label={tr('时间来源')}>
+            <Choice<TimeSource> value={t.timeSource} onChange={(v) => setT({ timeSource: v })}
+              options={[['LOCAL_REAL_TIME', tr('本地时间')], ['MANUAL_SHICHEN', tr('手动时辰')], ['PREVIEW_24H_CYCLE', tr('24 小时预览')]]} />
+          </Row>
+          {t.timeSource === 'MANUAL_SHICHEN' && (
+            <Row label={tr('手动时辰')}>
+              <Choice<number> value={t.manualIndex} onChange={(v) => setT({ manualIndex: v })}
+                options={MERIDIAN_CLOCK.map((e, i) => [i, `${e.shichen} ${e.hours}`] as [number, string])} />
+            </Row>
+          )}
+          {t.timeSource === 'PREVIEW_24H_CYCLE' && (
+            <Row label={tr('预览时长')}>
+              <Slider value={t.previewCycleMinutes} min={1} max={60} step={1} format={(v) => `${v} ${tr('分钟')}`}
+                onChange={(v) => setT({ previewCycleMinutes: v })} />
+            </Row>
+          )}
+          <Row label={tr('过渡时长')}>
+            <Choice<5 | 10 | 15 | 20> value={t.transitionMinutes} onChange={(v) => setT({ transitionMinutes: v })}
+              options={[[5, `5 ${tr('分钟')}`], [10, `10 ${tr('分钟')}`], [15, `15 ${tr('分钟')}`], [20, `20 ${tr('分钟')}`]]} />
+          </Row>
+          <Row label={tr('信息叠层')}>
+            <Choice<OverlayMode> value={t.overlay} onChange={(v) => setT({ overlay: v })}
+              options={[['OFF', tr('隐藏')], ['MINIMAL', tr('简')], ['DETAILED', tr('详')]]} />
+          </Row>
+          <Row label={tr('视觉侧重')}>
+            <Slider value={t.visualEmphasis} min={0} max={1} step={0.05} format={pct} onChange={(v) => setT({ visualEmphasis: v })} />
+          </Row>
+          <TemporalNowLine />
+          <div style={{ fontSize: '9px', color: UI.textMuted, lineHeight: 1.6 }}>
+            {tr('十二时辰配十二经为教学钟面，非完整子午流注；仅供观赏与学习。')}
+          </div>
+        </>
+      )}
+    </>
   );
 }
 
@@ -344,6 +454,9 @@ function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang, standa
         </>
       )}
 
+      <H text={tr('时间与声音')} />
+      <TimeAndSoundSection t={s.temporal} setT={(patch) => set((d) => ({ ...d, temporal: { ...d.temporal, ...patch } }))} />
+
       <H text={tr('显示')} />
       <Row label={tr('语言')}>
         <Choice<'en' | 'zh'> value={lang} onChange={(v) => setLang(v)} options={[['en', 'English'], ['zh', '中文']]} />
@@ -386,6 +499,18 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
   const rigRef = useRef<THREE.Group>(null);
   const controlsRef = useRef<{ target: THREE.Vector3; enabled: boolean; update: () => void }>(null);
   const manualRef = useRef({ active: false, endedAt: -10, resume: 1 });
+  /** 每条经一个侧重乘数引用（含奇经）；TemporalDriver 逐帧写，线与光点逐帧读 */
+  const emphasisRefs = useMemo<EmphasisRefs>(() => new Map(ALL_MERIDIANS.map((c) => [c, { v: 1 }])), []);
+
+  // ── 时辰引擎：只在开启时计时；离开屏保时彻底停掉 ──
+  const tcfg = settings.temporal;
+  useEffect(() => {
+    temporalStore.configure({
+      enabled: tcfg.enabled, timeSource: tcfg.timeSource, manualIndex: tcfg.manualIndex,
+      previewCycleMinutes: tcfg.previewCycleMinutes, transitionMinutes: tcfg.transitionMinutes
+    });
+  }, [tcfg.enabled, tcfg.timeSource, tcfg.manualIndex, tcfg.previewCycleMinutes, tcfg.transitionMinutes]);
+  useEffect(() => () => temporalStore.reset(), []);
 
   const set = useCallback((patch: (d: ScreensaverSettings) => ScreensaverSettings) => {
     setSettings((d) => { const n = patch(d); saveSettings(n); return n; });
@@ -463,8 +588,9 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
         <pointLight color={lights.center.color} intensity={lights.center.intensity}
                     distance={lights.center.distance} decay={0} position={[0, 1, 4]} />
         <Starfield />
-        <BodyRig rigRef={rigRef} opacity={settings.bodyOpacity} flowRef={flowRef.current} visible={settings.visible} />
+        <BodyRig rigRef={rigRef} opacity={settings.bodyOpacity} flowRef={flowRef.current} visible={settings.visible} emphasis={emphasisRefs} />
         <Driver settingsRef={settingsRef} rigRef={rigRef} manualRef={manualRef} controlsRef={controlsRef} />
+        <TemporalDriver refs={emphasisRefs} settingsRef={settingsRef} />
         <OrbitControls
           ref={controlsRef as never}
           enabled={settings.manualInteraction}
@@ -492,6 +618,9 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
               title={tr('3DQiFlow 主站：经穴图、十二经运行、方剂、条文')}>
         3DQiFlow ↗
       </a>}
+
+      {/* 时辰信息叠层（左下，极淡；界面显现时清晰几秒） */}
+      {settings.temporal.enabled && <TemporalOverlay mode={settings.temporal.overlay} bright={showUi} />}
 
       {/* 设置 / 全屏（右下，极淡） */}
       <div style={{ position: 'fixed', right: '18px', bottom: '16px', zIndex: 125, display: 'flex', gap: '6px',
