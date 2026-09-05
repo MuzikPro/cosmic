@@ -184,3 +184,135 @@ export function playFatPad(ctx: BaseAudioContext, dest: AudioNode, n: FatPadNote
   playPad(ctx, n.wet, { ...n, at: n.at + 0.2, gain: n.gain * 0.7, detuneCents: 19, pan: -n.pan, cutoff: n.cutoff * 0.8 });
   playSub(ctx, dest, { midi: n.midi - 12, at: n.at, attack: n.attack * 1.2, release: n.release, gain: n.gain * 0.55, pan: 0 });
 }
+
+/* ───────────────── 第二批声部（owner 2026-09-05 点名）───────────────── */
+
+/** 弓弦垫击：两把锯齿 + 三角，±5 音分，1 s 后进入 5.2 Hz 揉弦，低通从暗到亮像一弓拉开；带一丝松香噪声 */
+export interface BowedNote { midi: number; at: number; attack: number; hold: number; release: number; cutoff: number; gain: number; pan: number; wet: AudioNode }
+export function playBowed(ctx: BaseAudioContext, dest: AudioNode, n: BowedNote): void {
+  const f = midiToHz(n.midi);
+  const end = n.at + n.attack + n.hold + n.release;
+  const env = ctx.createGain(); env.gain.value = 0;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.2;
+  const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = Math.max(60, f * 0.5);
+  const pan = ctx.createStereoPanner(); pan.pan.value = n.pan;
+  const wetTap = ctx.createGain(); wetTap.gain.value = 0.8;
+  const vib = ctx.createOscillator(); vib.type = 'sine'; vib.frequency.value = 5.2;
+  const vibDepth = ctx.createGain(); vibDepth.gain.setValueAtTime(0, n.at); vibDepth.gain.linearRampToValueAtTime(f * 0.0035, n.at + n.attack + 1);
+  vib.connect(vibDepth);
+  const oscs: OscillatorNode[] = [vib];
+  const mk = (type: OscillatorType, ratio: number, g: number) => {
+    const o = ctx.createOscillator(); o.type = type; o.frequency.value = f * ratio; vibDepth.connect(o.frequency);
+    const og = ctx.createGain(); og.gain.value = g; o.connect(og); og.connect(lp); oscs.push(o);
+  };
+  mk('sawtooth', cents(5), 0.28); mk('sawtooth', cents(-5), 0.28); mk('triangle', 1, 0.45);
+  // 松香：窄带噪声，跟随包络
+  const nb = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const nd = nb.getChannelData(0); let sd = 4242;
+  for (let i = 0; i < nd.length; i++) { sd = (sd * 1664525 + 1013904223) >>> 0; nd[i] = (sd / 4294967296) * 2 - 1; }
+  const noise = ctx.createBufferSource(); noise.buffer = nb; noise.loop = true;
+  const nbp = ctx.createBiquadFilter(); nbp.type = 'bandpass'; nbp.frequency.value = f * 2; nbp.Q.value = 6;
+  const ng = ctx.createGain(); ng.gain.value = 0.05; noise.connect(nbp); nbp.connect(ng); ng.connect(lp);
+  lp.connect(hp); hp.connect(env); env.connect(pan); pan.connect(dest); env.connect(wetTap); wetTap.connect(n.wet);
+  lp.frequency.setValueAtTime(Math.max(150, n.cutoff * 0.3), n.at);
+  lp.frequency.linearRampToValueAtTime(n.cutoff, n.at + n.attack);
+  lp.frequency.setTargetAtTime(n.cutoff * 0.6, n.at + n.attack + n.hold, n.release / 3);
+  env.gain.setValueAtTime(0, n.at);
+  env.gain.linearRampToValueAtTime(n.gain, n.at + n.attack);
+  env.gain.setValueAtTime(n.gain, n.at + n.attack + n.hold);
+  env.gain.linearRampToValueAtTime(0, end);
+  oscs.forEach((o) => { o.start(n.at); o.stop(end + 0.05); }); noise.start(n.at); noise.stop(end + 0.05);
+}
+
+/** 钵鸣：正弦 f + 微失谐的 2.01f（自然拍频）+ 弱 3.02f；慢起、长留、长收；副本进湿路 */
+export interface BowlNote { midi: number; at: number; attack: number; hold: number; release: number; gain: number; pan: number; wet: AudioNode }
+export function playBowl(ctx: BaseAudioContext, dest: AudioNode, n: BowlNote): void {
+  const f = midiToHz(n.midi);
+  const end = n.at + n.attack + n.hold + n.release;
+  const env = ctx.createGain(); env.gain.value = 0;
+  const pan = ctx.createStereoPanner(); pan.pan.value = n.pan;
+  const wetTap = ctx.createGain(); wetTap.gain.value = 1.1;
+  const oscs: OscillatorNode[] = [];
+  const mk = (ratio: number, g: number) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * ratio; const og = ctx.createGain(); og.gain.value = g; o.connect(og); og.connect(env); oscs.push(o); };
+  mk(1, 0.6); mk(2.01, 0.32); mk(3.02, 0.12); mk(0.5, 0.15);
+  env.connect(pan); pan.connect(dest); env.connect(wetTap); wetTap.connect(n.wet);
+  env.gain.setValueAtTime(0, n.at);
+  env.gain.linearRampToValueAtTime(n.gain, n.at + n.attack);
+  env.gain.setValueAtTime(n.gain, n.at + n.attack + n.hold);
+  env.gain.setTargetAtTime(0, n.at + n.attack + n.hold, n.release / 4);
+  oscs.forEach((o) => { o.start(n.at); o.stop(end + 0.1); });
+}
+
+/** 人声般的元音垫：两把锯齿 → 三个并联带通（共振峰 oo → ah 缓慢滑动）→ 低通；温暖、有人味 */
+export interface VowelNote { midi: number; at: number; attack: number; hold: number; release: number; gain: number; pan: number; wet: AudioNode }
+const VOWEL_OO = [300, 870, 2240], VOWEL_AH = [730, 1090, 2440], FORMANT_GAIN = [1, 0.5, 0.25];
+export function playVowelPad(ctx: BaseAudioContext, dest: AudioNode, n: VowelNote): void {
+  const f = midiToHz(n.midi);
+  const end = n.at + n.attack + n.hold + n.release;
+  const src = ctx.createGain(); src.gain.value = 0.35;
+  const oscs: OscillatorNode[] = [];
+  [cents(6), cents(-6)].forEach((r) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f * r; o.connect(src); oscs.push(o); });
+  const sum = ctx.createGain();
+  VOWEL_OO.forEach((f1, i) => {
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 8;
+    bp.frequency.setValueAtTime(f1, n.at);
+    bp.frequency.linearRampToValueAtTime(VOWEL_AH[i], n.at + n.attack + n.hold);
+    bp.frequency.linearRampToValueAtTime(f1, end);
+    const g = ctx.createGain(); g.gain.value = FORMANT_GAIN[i];
+    src.connect(bp); bp.connect(g); g.connect(sum);
+  });
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 4000;
+  const env = ctx.createGain(); env.gain.value = 0;
+  const pan = ctx.createStereoPanner(); pan.pan.value = n.pan;
+  const wetTap = ctx.createGain(); wetTap.gain.value = 0.9;
+  sum.connect(lp); lp.connect(env); env.connect(pan); pan.connect(dest); env.connect(wetTap); wetTap.connect(n.wet);
+  env.gain.setValueAtTime(0, n.at);
+  env.gain.linearRampToValueAtTime(n.gain, n.at + n.attack);
+  env.gain.setValueAtTime(n.gain, n.at + n.attack + n.hold);
+  env.gain.linearRampToValueAtTime(0, end);
+  oscs.forEach((o) => { o.start(n.at); o.stop(end + 0.05); });
+}
+
+/** 颗粒闪光：几十粒极短的正弦（调式内音高、随机高八度、随机声像）在 2.5–3.5 s 内撒开，主要进湿路 */
+export interface ShimmerNote { midis: number[]; at: number; spread: number; grains: number; gain: number; wet: AudioNode; rng: () => number }
+export function playGranularShimmer(ctx: BaseAudioContext, dest: AudioNode, n: ShimmerNote): void {
+  const dry = ctx.createGain(); dry.gain.value = 0.3; dry.connect(dest);
+  const wet = ctx.createGain(); wet.gain.value = 0.9; wet.connect(n.wet);
+  for (let i = 0; i < n.grains; i++) {
+    const midi = n.midis[Math.floor(n.rng() * n.midis.length)] + 12 * Math.floor(n.rng() * 3);
+    const t = n.at + n.rng() * n.spread;
+    const len = 0.06 + n.rng() * 0.1;
+    const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = midiToHz(midi);
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(n.gain, t + len * 0.35); g.gain.linearRampToValueAtTime(0, t + len);
+    const p = ctx.createStereoPanner(); p.pan.value = n.rng() * 1.6 - 0.8;
+    o.connect(g); g.connect(p); p.connect(dry); p.connect(wet);
+    o.start(t); o.stop(t + len + 0.02);
+  }
+}
+
+/** 倒放式渐强：垫音 + 粉噪，长长升起、末尾骤停；主要进湿路——经典的"到达前"手势 */
+export interface ReverseNote { midi: number; at: number; duration: number; cutoff: number; gain: number; wet: AudioNode }
+export function playReverseSwell(ctx: BaseAudioContext, dest: AudioNode, n: ReverseNote): void {
+  const f = midiToHz(n.midi);
+  const end = n.at + n.duration;
+  const env = ctx.createGain(); env.gain.value = 0;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8;
+  const dry = ctx.createGain(); dry.gain.value = 0.35; const wet = ctx.createGain(); wet.gain.value = 1.0;
+  const oscs: OscillatorNode[] = [];
+  [[ 'sawtooth', cents(7), 0.3 ], [ 'sawtooth', cents(-7), 0.3 ], [ 'triangle', 1, 0.4 ]].forEach(([type, r, g]) => {
+    const o = ctx.createOscillator(); o.type = type as OscillatorType; o.frequency.value = f * (r as number);
+    const og = ctx.createGain(); og.gain.value = g as number; o.connect(og); og.connect(lp); oscs.push(o);
+  });
+  const nb = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate); const nd = nb.getChannelData(0); let b0 = 0, sd = 777;
+  for (let i = 0; i < nd.length; i++) { sd = (sd * 1664525 + 1013904223) >>> 0; const w = (sd / 4294967296) * 2 - 1; b0 = 0.98 * b0 + w * 0.05; nd[i] = b0 * 2; }
+  const noise = ctx.createBufferSource(); noise.buffer = nb; noise.loop = true;
+  const ng = ctx.createGain(); ng.gain.value = 0.25; noise.connect(ng); ng.connect(lp);
+  lp.connect(env); env.connect(dry); dry.connect(dest); env.connect(wet); wet.connect(n.wet);
+  lp.frequency.setValueAtTime(n.cutoff * 0.25, n.at);
+  lp.frequency.exponentialRampToValueAtTime(n.cutoff * 1.4, end);
+  env.gain.setValueAtTime(0.0001, n.at);
+  env.gain.exponentialRampToValueAtTime(n.gain * 0.15, n.at + n.duration * 0.6);
+  env.gain.exponentialRampToValueAtTime(n.gain, end - 0.02);
+  env.gain.linearRampToValueAtTime(0, end + 0.06);   // 骤停（60 ms，不留咔哒）
+  oscs.forEach((o) => { o.start(n.at); o.stop(end + 0.1); }); noise.start(n.at); noise.stop(end + 0.1);
+}
