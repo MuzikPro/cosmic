@@ -3,5 +3,6 @@ export * from './characters';
 export * from './motif';
 export * from './voices';
 export * from './audioEngine';
+export * from './vesselModulator';
 export * from './soundscape';
 export * from './controller';

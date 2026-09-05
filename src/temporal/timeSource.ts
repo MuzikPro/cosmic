@@ -9,6 +9,8 @@ export interface VirtualClockConfig {
   source: TimeSource;
   manualIndex?: number;          // MANUAL_SHICHEN
   previewCycleMinutes?: number;  // PREVIEW_24H_CYCLE
+  /** 开发调试：本地时间上加的偏移秒数（跳到边界前后）；不持久化 */
+  debugOffsetSeconds?: number;
 }
 
 export interface VirtualClock {
@@ -38,7 +40,9 @@ export function createVirtualClock(cfg: VirtualClockConfig, realNow: () => numbe
       const anchor = realNow();
       return { source: cfg.source, now: () => new Date(anchor + (realNow() - anchor) * rate) };
     }
-    default:
-      return { source: 'LOCAL_REAL_TIME', now: () => new Date(realNow()) };
+    default: {
+      const off = (cfg.debugOffsetSeconds ?? 0) * 1000;
+      return { source: 'LOCAL_REAL_TIME', now: () => new Date(realNow() + off) };
+    }
   }
 }

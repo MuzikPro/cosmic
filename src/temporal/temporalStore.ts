@@ -14,10 +14,10 @@ type Snapshot = TemporalMeridianState | null;
 type Listener = () => void;
 
 export type StoreConfig = Pick<TemporalSoundscapeSettings,
-  'enabled' | 'timeSource' | 'manualIndex' | 'previewCycleMinutes' | 'transitionMinutes'>;
+  'enabled' | 'timeSource' | 'manualIndex' | 'previewCycleMinutes' | 'transitionMinutes'> & { debugOffsetSeconds?: number };
 
 const configKey = (c: StoreConfig) =>
-  `${c.enabled}|${c.timeSource}|${c.manualIndex}|${c.previewCycleMinutes}|${c.transitionMinutes}`;
+  `${c.enabled}|${c.timeSource}|${c.manualIndex}|${c.previewCycleMinutes}|${c.transitionMinutes}|${c.debugOffsetSeconds ?? 0}`;
 
 class TemporalStore {
   private listeners = new Set<Listener>();
@@ -41,7 +41,8 @@ class TemporalStore {
     this.stop();
     if (!cfg.enabled) { this.setSnap(null); return; }
     this.clock = createVirtualClock({
-      source: cfg.timeSource, manualIndex: cfg.manualIndex, previewCycleMinutes: cfg.previewCycleMinutes
+      source: cfg.timeSource, manualIndex: cfg.manualIndex, previewCycleMinutes: cfg.previewCycleMinutes,
+      debugOffsetSeconds: cfg.debugOffsetSeconds
     });
     this.tick();
     const period = cfg.timeSource === 'PREVIEW_24H_CYCLE' ? 200 : 1000;

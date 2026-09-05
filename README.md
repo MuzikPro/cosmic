@@ -37,6 +37,10 @@ Off by default. Turn it on in ⚙ → *Time & Sound* and the page becomes time-a
   associated with the current meridian (宫商角徵羽 ↔ 土金木火水) becomes the modal centre,
   with sparse motifs that rise for Wood, float for Fire, hold for Earth, descend for Metal
   and sink for Water. One click is needed to start audio (browser autoplay policy).
+- **Vessels shape the space** — the eight extraordinary vessels never get tones; when
+  shown on the body they modulate the field instead: 任 depth and warmth, 督 brightness and
+  lift, 衝 a slow 8–12 s pulse, 帶 a gentle stereo orbit (Off / Subtle / Full), the 蹻 and 維
+  pairs pan, pacing, glue and motion. An artistic mapping, documented as such.
 - **Time overlay** — faint, bottom-left: time · 时辰 · meridian · tone. Minimal / detailed /
   hidden. Manual 时辰 and a compressed 24-hour preview are available for exploring.
 

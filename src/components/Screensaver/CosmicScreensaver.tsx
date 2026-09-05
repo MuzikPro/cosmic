@@ -22,6 +22,9 @@ import type { TemporalMeridianState, TemporalSoundscapeSettings, TimeSource, Ove
 import { TemporalOverlay } from './TemporalOverlay';
 import { liveAudio, LiveAudio, MASTER_MAX } from '@/audio/audioEngine';
 import { soundscapeController } from '@/audio/controller';
+import { vesselWeightsFromVisible } from '@/audio/vesselModulator';
+import { TemporalDebugPanel, isDebugEnabled } from './TemporalDebugPanel';
+import type { SpatialMode } from '@/temporal/types';
 
 /**
  * 宇宙经络 · 屏保（owner 2026-09-05）——一具透明人体悬在星空中央，十二正经与
@@ -374,6 +377,15 @@ function TimeAndSoundSection({ t, setT }: { t: TemporalSoundscapeSettings; setT:
           <Row label={tr('密度')}>
             <Slider value={t.musicDensity} min={0} max={1} step={0.05} format={pct} onChange={(v) => setT({ musicDensity: v })} />
           </Row>
+          <Row label={tr('空间环绕')}>
+            <Choice<SpatialMode> value={t.spatialMode} onChange={(v) => setT({ spatialMode: v })}
+              options={[['OFF', tr('关闭')], ['SUBTLE', tr('轻微')], ['FULL', tr('完全')]]} />
+          </Row>
+          <button style={{ ...toggleButtonStyle(t.vesselModulation), fontSize: '10px', padding: '2px 8px', textAlign: 'left' }}
+                  onClick={() => setT({ vesselModulation: !t.vesselModulation })}>
+            {tr('奇经调制')}{t.vesselModulation ? ' · ON' : ' · OFF'}
+          </button>
+          <div style={{ fontSize: '9px', color: UI.textMuted, lineHeight: 1.6 }}>{tr('奇经不配五音；它们只改变声场的深度、亮度、脉动与环绕（本应用的艺术化设定）。显示中的奇经作用更强。')}</div>
           {advanced && (
             <>
               <Row label={tr('调中心（参考值）')}>
@@ -560,26 +572,30 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
 
   // ── 时辰引擎：只在开启时计时；离开屏保时彻底停掉 ──
   const tcfg = settings.temporal;
+  const [debugOffset, setDebugOffset] = useState(0);   // 调试面板的临时时间偏移；不持久化
+  const debug = isDebugEnabled();
   useEffect(() => {
     temporalStore.configure({
       enabled: tcfg.enabled, timeSource: tcfg.timeSource, manualIndex: tcfg.manualIndex,
-      previewCycleMinutes: tcfg.previewCycleMinutes, transitionMinutes: tcfg.transitionMinutes
+      previewCycleMinutes: tcfg.previewCycleMinutes, transitionMinutes: tcfg.transitionMinutes,
+      debugOffsetSeconds: debug ? debugOffset : 0
     });
-  }, [tcfg.enabled, tcfg.timeSource, tcfg.manualIndex, tcfg.previewCycleMinutes, tcfg.transitionMinutes]);
+  }, [tcfg.enabled, tcfg.timeSource, tcfg.manualIndex, tcfg.previewCycleMinutes, tcfg.transitionMinutes, debugOffset, debug]);
   useEffect(() => () => temporalStore.reset(), []);
 
   // ── 音景：开启且音频已在运行时挂上；关闭或音频未获手势时摘下。音量/密度/调中心实时跟随。 ──
   const audioState = useLiveAudioState();
+  const vessels = useMemo(() => vesselWeightsFromVisible(settings.visible, tcfg.vesselModulation), [settings.visible, tcfg.vesselModulation]);
   useEffect(() => {
     if (tcfg.enabled && audioState === 'running') {
-      soundscapeController.attach({ density: tcfg.musicDensity, centerMidi: tcfg.tonalCenterMidi, octaveBias: tcfg.octaveBias });
+      soundscapeController.attach({ density: tcfg.musicDensity, centerMidi: tcfg.tonalCenterMidi, octaveBias: tcfg.octaveBias, vessels, spatialMode: tcfg.spatialMode });
     } else {
       soundscapeController.detach();
     }
   }, [tcfg.enabled, audioState]);   // eslint-disable-line react-hooks/exhaustive-deps -- 参数由下一个 effect 跟随
   useEffect(() => {
-    soundscapeController.setParams({ density: tcfg.musicDensity, centerMidi: tcfg.tonalCenterMidi, octaveBias: tcfg.octaveBias });
-  }, [tcfg.musicDensity, tcfg.tonalCenterMidi, tcfg.octaveBias]);
+    soundscapeController.setParams({ density: tcfg.musicDensity, centerMidi: tcfg.tonalCenterMidi, octaveBias: tcfg.octaveBias, vessels, spatialMode: tcfg.spatialMode });
+  }, [tcfg.musicDensity, tcfg.tonalCenterMidi, tcfg.octaveBias, vessels, tcfg.spatialMode]);
   useEffect(() => { liveAudio.setVolume(tcfg.masterVolume); }, [tcfg.masterVolume]);
   useEffect(() => {
     const onVis = () => { void liveAudio.onVisibility(document.visibilityState === 'visible'); };
@@ -694,6 +710,11 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
               title={tr('3DQiFlow 主站：经穴图、十二经运行、方剂、条文')}>
         3DQiFlow ↗
       </a>}
+
+      {debug && (
+        <TemporalDebugPanel t={settings.temporal} visible={settings.visible} offset={debugOffset} setOffset={setDebugOffset}
+          setT={(patch) => set((d) => ({ ...d, temporal: { ...d.temporal, ...patch } }))} />
+      )}
 
       {/* 时辰信息叠层（左下，极淡；界面显现时清晰几秒） */}
       {settings.temporal.enabled && <TemporalOverlay mode={settings.temporal.overlay} bright={showUi} />}

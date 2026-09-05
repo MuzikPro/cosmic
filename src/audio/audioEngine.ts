@@ -11,6 +11,8 @@ export interface AudioGraph {
   ctx: BaseAudioContext;
   input: GainNode;        // 各层接到这里（干 + 湿）
   wetIn: GainNode;        // 只进湿路（混响 + 延迟），不进干路——给"华丽铃"与"夜间厚垫"的上层
+  bedBus: GainNode;       // 铺垫总线 → input；冲脉的缓慢脉动作用在这里
+  orbit: StereoPannerNode;// 湿场的声像环绕（带脉）；干声不动，空间绕着听者转
   dry: GainNode;
   reverbSend: GainNode;
   reverb: ConvolverNode;
@@ -78,9 +80,11 @@ export function buildGraph(ctx: BaseAudioContext, target: AudioNode = ctx.destin
   limiter.attack.value = 0.003; limiter.release.value = 0.25;
   const master = ctx.createGain(); master.gain.value = masterGain;
   input.connect(dry); dry.connect(limiter);
-  input.connect(reverbSend); reverbSend.connect(reverb); reverb.connect(wetTone); wetTone.connect(limiter);
+  const orbit = ctx.createStereoPanner(); orbit.pan.value = 0;
+  input.connect(reverbSend); reverbSend.connect(reverb); reverb.connect(wetTone); wetTone.connect(orbit); orbit.connect(limiter);
+  const bedBus = ctx.createGain(); bedBus.gain.value = 1; bedBus.connect(input);
   limiter.connect(master); master.connect(target);
-  return { ctx, input, wetIn, dry, reverbSend, reverb, limiter, master };
+  return { ctx, input, wetIn, bedBus, orbit, dry, reverbSend, reverb, limiter, master };
 }
 
 export type LiveState = 'idle' | 'running' | 'suspended' | 'blocked';
