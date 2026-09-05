@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>天人 · Cosmic Meridian</title>
+    <meta name="description" content="Cosmic Meridian 天人: a translucent human body floating in a starfield, the 12 meridians and 8 extraordinary vessels flowing in slow qi. Camera orbit, body rotation, meridian picker. An ambient screensaver from 3DQiFlow. Educational only." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="3DQiFlow" />
+    <meta property="og:title" content="天人 · Cosmic Meridian" />
+    <meta property="og:description" content="The 12 meridians flowing on a translucent body in a starfield — an ambient 3D screensaver from 3DQiFlow." />
+    <meta property="og:url" content="https://3dqiflow.com/" />
+    <meta property="og:image" content="https://3dqiflow.com/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="天人 · Cosmic Meridian" />
+    <meta name="twitter:description" content="The 12 meridians flowing on a translucent body in a starfield — an ambient 3D screensaver from 3DQiFlow." />
+    <meta name="twitter:image" content="https://3dqiflow.com/og.png" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- 启动防线（ES5 内联，旧 Safari 也能解析）：
+         ① WebGL2 探测——three r169 起仅支持 WebGL2（iPadOS/iOS ≥15），缺则明说而非白屏；
+         ② 启动期报错兜底——bundle 解析/加载失败时 root 仍为空，把原因显示出来。 -->
+    <script>
+      (function () {
+        function overlay(title, detail) {
+          if (document.getElementById('boot-error')) return;
+          var el = document.createElement('div');
+          el.id = 'boot-error';
+          el.setAttribute(
+            'style',
+            'position:fixed;inset:0;z-index:9999;background:#0f0f1a;color:#e2e2ea;' +
+              'display:flex;align-items:center;justify-content:center;text-align:center;' +
+              'padding:24px;font-family:sans-serif;line-height:1.9'
+          );
+          el.innerHTML =
+            '<div><div style="font-size:20px;color:#f0c27f;letter-spacing:3px;margin-bottom:12px">3DQiFlow</div>' +
+            '<div style="font-size:14px">' + title + '</div>' +
+            (detail ? '<div style="font-size:11px;color:#84849a;margin-top:10px;word-break:break-all">' + detail + '</div>' : '') +
+            '</div>';
+          document.body.appendChild(el);
+        }
+        try {
+          var canvas = document.createElement('canvas');
+          var gl = canvas.getContext('webgl2');
+          if (!gl) {
+            overlay(
+              '此浏览器当前无法使用 WebGL2，3D 引擎无法启动。<br><br>' +
+                '若系统较新（iPadOS/iOS 15 及以上本应支持），多半是 WebGL 被系统关闭了：<br>' +
+                '· 检查 设置 → 隐私与安全性 → <b>锁定模式</b>，关闭后重启浏览器；<br>' +
+                '&nbsp;&nbsp;或在 Safari 地址栏 ᴬᴬ → 网站设置 中对本站单独关闭锁定模式；<br>' +
+                '· 或检查 设置 → Safari → 高级 → 功能标志 中与 WebGL 相关的开关。<br>' +
+                '若系统较旧，请升级到 iPadOS/iOS 15 及以上。',
+              ''
+            );
+            return;
+          }
+        } catch (e) {
+          overlay('3D 引擎探测失败，请更换或升级浏览器。', String(e && e.message));
+          return;
+        }
+        window.addEventListener(
+          'error',
+          function (e) {
+            var root = document.getElementById('root');
+            if (root && root.children.length === 0) {
+              overlay(
+                '页面启动失败。请刷新重试；若反复出现，请把下方信息反馈给作者。',
+                String((e && e.message) || (e && e.target && (e.target.src || e.target.href)) || '未知错误')
+              );
+            }
+          },
+          true
+        );
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

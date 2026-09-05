@@ -1,0 +1,288 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* iOS/iPadOS 动态工具栏：100vh/100% = 工具栏收起时的大视口，工具栏展开时
+   文档比可视区高 → 可被拖滚，fixed 头部被顶出屏、底部留黑带。
+   锁死文档 + 用 dvh（随工具栏实时伸缩）取代 vh。 */
+body {
+  position: fixed;
+  inset: 0;
+}
+@supports (height: 100dvh) {
+  html,
+  body,
+  #root {
+    height: 100dvh;
+  }
+  .scene-root {
+    width: 100dvw !important;
+    height: 100dvh !important;
+  }
+}
+
+body {
+  font-family: 'Noto Sans SC', 'Source Han Sans SC', '思源黑体', sans-serif;
+  background: #0f0f1a;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── 响应式收敛（owner 2026-08-20：iPhone/iPad 布局崩坏修复）──
+   桌面布局全部是 inline style 固定面板，窄屏用布局类 + !important 覆盖。
+   类约定：panel-left/panel-right 常驻侧栏；panel-pop 点选弹卡；
+   bar-bottom 底部横条；reader-* 条文阅读三栏；quote-card 点睛卡；
+   tree-toggle 化裁树钮；hide-narrow 窄屏隐藏；show-narrow 仅窄屏显示。 */
+
+/* ── iPad/iPhone 真机适配（模拟器里看不出的三件事）──
+   ① Safari 工具栏会盖住/顶出 100vh 布局：场景与侧栏改用动态视口高度 dvh；
+   ② 刘海/圆角/状态栏：viewport-fit=cover 后须给顶栏与底条补 env(safe-area-inset-*)；
+   owner 2026-08-25：iPad 上看不到顶部菜单栏，即此类真机因素。 */
+@supports (height: 100dvh) {
+  .scene-root { height: 100dvh !important; }
+  .panel-left, .panel-right { max-height: calc(100dvh - 110px) !important; }
+}
+.app-header { padding-top: calc(15px + env(safe-area-inset-top, 0px)) !important; }
+.bar-bottom { padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)) !important; }
+
+/* 英文比中文长（owner 2026-09-05 实录：右栏「Large Intestine (LI) ↑ rise」折成三行）：
+   非中文界面时侧栏放宽。用 min-width 盖过组件内联 width；窄屏媒体查询在后，优先。 */
+html:not([data-lang="zh"]) .panel-left { min-width: 232px; }
+html:not([data-lang="zh"]) .panel-right { min-width: 262px; }
+
+/* 侧栏内滚（奇经小节加入后右栏在矮窗口会超出视口）：细滚动条，别喧宾夺主 */
+.panel-left, .panel-right {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+.panel-left::-webkit-scrollbar, .panel-right::-webkit-scrollbar { width: 5px; }
+.panel-left::-webkit-scrollbar-thumb, .panel-right::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.show-narrow {
+  display: none;
+}
+
+/* 平板（iPad 竖屏）及以下 */
+@media (max-width: 1024px) {
+  .app-header {
+    padding: 8px 10px !important;
+    padding-top: calc(8px + env(safe-area-inset-top, 0px)) !important;
+  }
+  .app-header-left {
+    flex-wrap: wrap !important;
+    gap: 4px 12px !important;
+  }
+  .app-title {
+    font-size: 15px !important;
+    letter-spacing: 2px !important;
+  }
+  .app-subtitle {
+    display: none !important;
+  }
+  .app-nav {
+    width: 100% !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .app-nav button {
+    flex-shrink: 0;
+  }
+
+  /* 窄屏标题区换两行（标题行＋横滚导航行）：语言键若纵向居中会压在
+     导航行右端。钉到标题行，并给导航行留出让位。 */
+  .app-header {
+    align-items: flex-start !important;
+  }
+  .app-lang {
+    margin-top: 1px !important;
+    flex-shrink: 0;
+  }
+
+  .panel-left, .panel-right { min-width: 0 !important; }
+  .panel-left {
+    left: 8px !important;
+    top: 76px !important;
+    max-width: min(46vw, 260px) !important;
+    max-height: 46vh !important;
+    overflow-y: auto !important;
+  }
+  .panel-right {
+    right: 8px !important;
+    top: 76px !important;
+    max-width: min(48vw, 260px) !important;
+    max-height: 46vh !important;
+    overflow-y: auto !important;
+  }
+  .panel-pop {
+    left: auto !important;
+    right: 8px !important;
+    top: 76px !important;
+    width: min(82vw, 300px) !important;
+    max-height: 58vh !important;
+    overflow-y: auto !important;
+    z-index: 130 !important;
+  }
+
+  .bar-bottom {
+    left: 8px !important;
+    right: 8px !important;
+    transform: none !important;
+    max-width: none !important;
+    overflow-x: auto !important;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .bar-bottom::-webkit-scrollbar {
+    display: none;
+  }
+  .bar-bottom > * {
+    flex-shrink: 0;
+  }
+  .bar-bottom input[type='range'] {
+    width: 32vw !important;
+    min-width: 110px;
+  }
+
+  .quote-card {
+    max-width: min(64vw, 300px) !important;
+  }
+  .hide-narrow {
+    display: none !important;
+  }
+
+  /* 条文阅读三栏收窄 */
+  .reader-list {
+    left: 8px !important;
+    top: 76px !important;
+    width: 190px !important;
+  }
+  .reader-stream {
+    left: 206px !important;
+    right: 302px !important;
+    top: 76px !important;
+  }
+  .reader-right {
+    right: 8px !important;
+    top: 76px !important;
+    width: 286px !important;
+  }
+  .reader-progress {
+    left: 206px !important;
+    right: 302px !important;
+    overflow-x: auto !important;
+    scrollbar-width: none;
+  }
+  .reader-progress::-webkit-scrollbar {
+    display: none;
+  }
+  .reader-progress > * {
+    flex-shrink: 0;
+  }
+}
+
+/* 手机（iPhone 竖横屏） */
+@media (max-width: 700px) {
+  .panel-left {
+    max-width: min(53vw, 230px) !important;
+    max-height: 40vh !important;
+    padding: 10px !important;
+  }
+  .panel-right {
+    max-width: 42vw !important;
+    max-height: 40vh !important;
+    padding: 10px !important;
+  }
+  .quote-card {
+    left: 8px !important;
+    bottom: 118px !important;
+    max-width: min(72vw, 300px) !important;
+  }
+  .tree-toggle {
+    left: 8px !important;
+    bottom: 72px !important;
+  }
+
+  /* 条文阅读：正文全宽，3D 伴读列让位，目录变悬浮开关 */
+  .reader-list {
+    display: none !important;
+  }
+  .reader-list.open-narrow {
+    display: block !important;
+    width: min(78vw, 300px) !important;
+    bottom: 104px !important;
+    z-index: 140 !important;
+  }
+  .reader-stream {
+    left: 8px !important;
+    right: 8px !important;
+  }
+  .reader-right {
+    display: none !important;
+  }
+  .reader-progress {
+    left: 8px !important;
+    right: 8px !important;
+  }
+  .show-narrow {
+    display: block !important;
+  }
+}
+
+/* 方剂详解 · 中部内容卡（owner 2026-08-26）：
+   药物组成五列对齐（名/角色/剂量/归经/作用），窄屏时作用行独占一行 */
+.drug-grid {
+  display: grid;
+  grid-template-columns: 110px 44px 92px 170px 1fr;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+/* 卡宽而非视口宽决定折行：方义圆运动侧台占位后卡会变窄（owner 2026-09-05 实录：
+   1280px 下作用列被挤成一字一行）。容器查询按卡的实际宽度切到窄版网格。 */
+.formula-card { container-type: inline-size; }
+@container (max-width: 640px) {
+  .drug-grid { grid-template-columns: 96px 40px 80px 1fr; }
+  .drug-grid .drug-action { grid-column: 1 / -1; padding-left: 16px; margin-top: -4px; }
+}
+.formula-card::-webkit-scrollbar { width: 5px; }
+.formula-card::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+}
+@media (max-width: 1024px) {
+  .formula-card {
+    left: 8px !important;
+    right: 8px !important;
+    top: calc(46dvh + 84px) !important;
+    bottom: 8px !important;
+    padding: 14px 16px !important;
+  }
+  .drug-grid { grid-template-columns: 96px 40px 80px 1fr; }
+  .drug-grid .drug-action { grid-column: 1 / -1; padding-left: 16px; margin-top: -4px; }
+}
