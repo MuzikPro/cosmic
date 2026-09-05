@@ -33,6 +33,9 @@ const TWO_PI = Math.PI * 2;
 const D2R = Math.PI / 180;
 /** App 换语言时整树重挂（App.tsx key={lang}）；面板开合跨重挂保留，切语言不丢面板 */
 let panelOpenAcrossRemount = false;
+/** 互链：主站内的屏保页指向独立站；独立站左上角指回主站 */
+const COSMIC_SITE = 'https://cosmic.3dqiflow.com/';
+const MAIN_SITE = 'https://www.3dqiflow.com/';
 const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 
 /** 逐帧驱动：镜头环绕 / 人体自转、手动交互后的柔和接回、视场角 */
@@ -247,8 +250,9 @@ function MeridianPicker({ visible, onChange }: { visible: string[]; onChange: (v
   );
 }
 
-function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang }: {
+function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang, standaloneLink }: {
   lang: 'en' | 'zh';
+  standaloneLink: boolean;
   s: ScreensaverSettings; set: (patch: (d: ScreensaverSettings) => ScreensaverSettings) => void;
   fullscreen: boolean; onFullscreen: () => void; onReset: () => void;
 }) {
@@ -352,6 +356,13 @@ function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang }: {
       <button style={{ ...toggleButtonStyle(false), fontSize: '10px', padding: '3px 8px', marginTop: '4px' }} onClick={onReset}>
         {tr('恢复默认')}
       </button>
+      {standaloneLink && (
+        <a href={COSMIC_SITE} target="_blank" rel="noopener"
+           style={{ fontSize: '10px', color: UI.textMuted, textDecoration: 'none', letterSpacing: '0.5px', marginTop: '2px' }}
+           title={tr('独立全屏站，可设为屏保')}>
+          ↗ cosmic.3dqiflow.com · {tr('独立全屏站')}
+        </a>
+      )}
     </div>
   );
 }
@@ -448,6 +459,12 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
               onClick={onExit} title={`${tr('返回')} ${returnLabel}`}>
         ↩ 3DQiFlow · {returnLabel}
       </button>}
+      {!onExit && <a href={MAIN_SITE} style={{ ...chip(showUi), left: '18px', top: '16px', textDecoration: 'none' }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = showUi ? '0.28' : '0')}
+              title={tr('3DQiFlow 主站：经穴图、十二经运行、方剂、条文')}>
+        3DQiFlow ↗
+      </a>}
 
       {/* 设置 / 全屏（右下，极淡） */}
       <div style={{ position: 'fixed', right: '18px', bottom: '16px', zIndex: 125, display: 'flex', gap: '6px',
@@ -463,7 +480,7 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
       </div>
 
       {panelOpen && (
-        <SettingsPanel s={settings} set={set} fullscreen={fullscreen} onFullscreen={toggleFullscreen} onReset={reset} lang={lang === 'zh' ? 'zh' : 'en'} />
+        <SettingsPanel s={settings} set={set} fullscreen={fullscreen} onFullscreen={toggleFullscreen} onReset={reset} lang={lang === 'zh' ? 'zh' : 'en'} standaloneLink={!!onExit} />
       )}
     </div>
   );

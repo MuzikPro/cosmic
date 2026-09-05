@@ -633,5 +633,8 @@ export const EN: Record<string, string> = {
   '陰維': 'Yin Wei',
   '陽維': 'Yang Wei',
   '环绕 + 自转': 'Orbit + rotation',
-  '语言': 'Language'
+  '语言': 'Language',
+  '独立全屏站': 'standalone full-screen site',
+  '独立全屏站，可设为屏保': 'Standalone full-screen site — usable as a screensaver',
+  '3DQiFlow 主站：经穴图、十二经运行、方剂、条文': '3DQiFlow main site: acupoint atlas, meridian flow, formulas, Shanghan Lun reader'
 };
