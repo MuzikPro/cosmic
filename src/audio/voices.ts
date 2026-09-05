@@ -161,3 +161,26 @@ export function createAir(ctx: BaseAudioContext, dest: AudioNode): Air {
     stop(at) { g.gain.setTargetAtTime(0, at, 2); src.stop(at + 8); }
   };
 }
+
+/**
+ * 华丽铃（白天的事件音，owner 2026-09-05）：主铃 + 高八度铃（120 ms 后、对侧声像、只进湿路）+
+ * 高五度微弱闪光（只进湿路）+ 短促的正弦身体。上层全走湿路：更开阔而不更响。
+ */
+export interface GrandBellNote extends BellNote { wet: AudioNode }
+export function playGrandBell(ctx: BaseAudioContext, dest: AudioNode, n: GrandBellNote): void {
+  playBell(ctx, dest, { midi: n.midi, at: n.at, release: n.release, gain: n.gain, pan: n.pan, brightness: n.brightness, metallic: n.metallic });
+  playBell(ctx, n.wet, { midi: n.midi + 12, at: n.at + 0.12, release: n.release * 1.2, gain: n.gain * 0.5, pan: -n.pan, brightness: n.brightness * 0.8, metallic: n.metallic });
+  playBell(ctx, n.wet, { midi: n.midi + 19, at: n.at + 0.35, release: n.release * 1.4, gain: n.gain * 0.24, pan: n.pan * 0.5, brightness: 0.4 });
+  playSub(ctx, dest, { midi: n.midi - 12, at: n.at, attack: 0.08, release: 4, gain: n.gain * 0.5, pan: 0 });
+}
+
+/**
+ * 厚垫（夜间的事件音）：两层三振荡器 pad（一层干、一层更宽失谐只进湿路、晚 200 ms）+ 低八度正弦身体。
+ * 慢起慢收，滤波更暗——"柔软而巨大"。
+ */
+export interface FatPadNote extends PadNote { wet: AudioNode }
+export function playFatPad(ctx: BaseAudioContext, dest: AudioNode, n: FatPadNote): void {
+  playPad(ctx, dest, { ...n, detuneCents: 12 });
+  playPad(ctx, n.wet, { ...n, at: n.at + 0.2, gain: n.gain * 0.7, detuneCents: 19, pan: -n.pan, cutoff: n.cutoff * 0.8 });
+  playSub(ctx, dest, { midi: n.midi - 12, at: n.at, attack: n.attack * 1.2, release: n.release, gain: n.gain * 0.55, pan: 0 });
+}

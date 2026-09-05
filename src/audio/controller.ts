@@ -22,7 +22,7 @@ class SoundscapeController {
     const g = liveAudio.audioGraph;
     if (!g || this.scape) return this.scape !== null;
     const ctx = g.ctx;
-    this.scape = new Soundscape(ctx, g.input, params);
+    this.scape = new Soundscape(ctx, g.input, params, Math.random, g.wetIn);
     const push = () => {
       const s = temporalStore.getSnapshot();
       if (s && this.scape) this.scape.update(s, ctx.currentTime);

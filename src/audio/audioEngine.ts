@@ -9,7 +9,8 @@
 
 export interface AudioGraph {
   ctx: BaseAudioContext;
-  input: GainNode;        // 各层接到这里
+  input: GainNode;        // 各层接到这里（干 + 湿）
+  wetIn: GainNode;        // 只进湿路（混响 + 延迟），不进干路——给"华丽铃"与"夜间厚垫"的上层
   dry: GainNode;
   reverbSend: GainNode;
   reverb: ConvolverNode;
@@ -65,6 +66,9 @@ export function buildGraph(ctx: BaseAudioContext, target: AudioNode = ctx.destin
   const echoSend = ctx.createGain(); echoSend.gain.value = 0.5;
   const echoLevel = ctx.createGain(); echoLevel.gain.value = 0.55;
   input.connect(echoSend);
+  const wetIn = ctx.createGain(); wetIn.gain.value = 1;
+  wetIn.connect(reverb);
+  const wetEcho = ctx.createGain(); wetEcho.gain.value = 0.4; wetIn.connect(wetEcho); wetEcho.connect(dL);
   echoSend.connect(dL); dL.connect(lpL); lpL.connect(fbL); fbL.connect(dR);   // L → R
   dR.connect(lpR); lpR.connect(fbR); fbR.connect(dL);                          // R → L
   lpL.connect(merger, 0, 0); lpR.connect(merger, 0, 1);
@@ -76,7 +80,7 @@ export function buildGraph(ctx: BaseAudioContext, target: AudioNode = ctx.destin
   input.connect(dry); dry.connect(limiter);
   input.connect(reverbSend); reverbSend.connect(reverb); reverb.connect(wetTone); wetTone.connect(limiter);
   limiter.connect(master); master.connect(target);
-  return { ctx, input, dry, reverbSend, reverb, limiter, master };
+  return { ctx, input, wetIn, dry, reverbSend, reverb, limiter, master };
 }
 
 export type LiveState = 'idle' | 'running' | 'suspended' | 'blocked';
