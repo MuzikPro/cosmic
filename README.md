@@ -25,6 +25,25 @@ display, or full-screen as a screensaver.
 - **English / 中文**, settings remembered locally (`3dqiflow:screensaver`), no accounts,
   no tracking.
 
+## Time & Sound (opt-in)
+
+Off by default. Turn it on in ⚙ → *Time & Sound* and the page becomes time-aware:
+
+- **Meridian clock** — your local time selects the current 时辰 (two-hour period) and its
+  meridian (子 Gallbladder → 丑 Liver → 寅 Lung → … → 亥 Triple Energizer). That channel is
+  gently emphasized; the other eleven stay alive. Transitions crossfade over 5–20 minutes.
+- **Generative soundscape** — synthesized in the browser with Web Audio, no samples, no loop.
+  A sub-perceptual 宫 (Gong) foundation holds the centre; the Five Tone traditionally
+  associated with the current meridian (宫商角徵羽 ↔ 土金木火水) becomes the modal centre,
+  with sparse motifs that rise for Wood, float for Fire, hold for Earth, descend for Metal
+  and sink for Water. One click is needed to start audio (browser autoplay policy).
+- **Time overlay** — faint, bottom-left: time · 时辰 · meridian · tone. Minimal / detailed /
+  hidden. Manual 时辰 and a compressed 24-hour preview are available for exploring.
+
+The 12-period clock is the common teaching model, not the full 子午流注 system; the
+tone-to-element mapping follows the *Suwen*, while the synth characters are artistic
+choices. Nothing here treats, diagnoses, or "activates" anything.
+
 ## Use it as a screensaver or live wallpaper
 
 - **Any browser** — press ⛶ (or F11 / ⌃⌘F) for fullscreen. The page keeps the screen awake.

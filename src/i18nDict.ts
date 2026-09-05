@@ -664,5 +664,17 @@ export const EN: Record<string, string> = {
   '土': 'Earth',
   '金': 'Metal',
   '水': 'Water',
-  '十二时辰配十二经为教学钟面，非完整子午流注；仅供观赏与学习。': 'The 12-period meridian clock is a teaching model, not the full Zi-Wu Liu-Zhu system. For viewing and study only.'
+  '十二时辰配十二经为教学钟面，非完整子午流注；仅供观赏与学习。': 'The 12-period meridian clock is a teaching model, not the full Zi-Wu Liu-Zhu system. For viewing and study only.',
+  '声音': 'Sound',
+  '开始声音': 'Start sound',
+  '声音需要一次点击才能开始': 'Sound needs one click to start',
+  '此浏览器不支持 Web Audio': 'Web Audio is not supported in this browser',
+  '音量': 'Volume',
+  '密度': 'Density',
+  '静音': 'Mute',
+  '取消静音': 'Unmute',
+  '高级': 'Advanced',
+  '调中心（参考值）': 'Tonal center (reference)',
+  '八度偏移': 'Octave bias',
+  '五音是相对的调式功能，整个音景可整体移调；参考值不代表史实音高。': 'The Five Tones are relative modal functions; the whole soundscape transposes together. The reference value is not a historical pitch.'
 };

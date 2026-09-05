@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as THREE from 'three';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
@@ -20,6 +20,8 @@ import { temporalStore, useTemporalState } from '@/temporal/temporalStore';
 import { meridianWeights, emphasisScale } from '@/temporal/shichen';
 import type { TemporalMeridianState, TemporalSoundscapeSettings, TimeSource, OverlayMode } from '@/temporal/types';
 import { TemporalOverlay } from './TemporalOverlay';
+import { liveAudio, LiveAudio, MASTER_MAX } from '@/audio/audioEngine';
+import { soundscapeController } from '@/audio/controller';
 
 /**
  * 宇宙经络 · 屏保（owner 2026-09-05）——一具透明人体悬在星空中央，十二正经与
@@ -319,16 +321,70 @@ function TemporalNowLine() {
  * 时间与声音（时辰经络音景）设置：一个总开关之后才展开；关闭时不产生任何时间维度逻辑。
  * 第一波：时间来源 / 过渡 / 叠层 / 视觉侧重；音量与密度随音频层（第四阶段）一起出现。
  */
+/** 上一次非零音量（静音切回用） */
+let lastAudibleVolume = 0.2;
+
+function useLiveAudioState() {
+  return useSyncExternalStore(liveAudio.subscribe, () => liveAudio.state, () => 'idle' as const);
+}
+
 function TimeAndSoundSection({ t, setT }: { t: TemporalSoundscapeSettings; setT: (patch: Partial<TemporalSoundscapeSettings>) => void }) {
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const [advanced, setAdvanced] = useState(false);
+  const audioState = useLiveAudioState();
+  const supported = LiveAudio.supported();
+  // 总开关的点击就是浏览器要求的用户手势：在这里创建/恢复 AudioContext
+  const toggle = () => {
+    const next = !t.enabled;
+    setT({ enabled: next });
+    if (next && supported) void liveAudio.start(t.masterVolume);
+    else if (!next) void liveAudio.stop();
+  };
+  const mute = () => {
+    if (t.masterVolume > 0) { lastAudibleVolume = t.masterVolume; setT({ masterVolume: 0 }); }
+    else setT({ masterVolume: lastAudibleVolume || 0.2 });
+  };
   return (
     <>
       <button style={{ ...toggleButtonStyle(t.enabled), fontSize: '10px', padding: '3px 8px', textAlign: 'left' }}
-              onClick={() => setT({ enabled: !t.enabled })}>
+              onClick={toggle}>
         {tr('时辰经络音景')}{t.enabled ? ' · ON' : ' · OFF'}
       </button>
       {t.enabled && (
         <>
+          <Row label={tr('声音')}>
+            {!supported && <div style={{ fontSize: '9px', color: UI.textMuted }}>{tr('此浏览器不支持 Web Audio')}</div>}
+            {supported && audioState !== 'running' && (
+              <button style={{ ...toggleButtonStyle(false), fontSize: '10px', padding: '2px 8px', borderColor: UI.accent, color: UI.accent }}
+                      onClick={() => void liveAudio.start(t.masterVolume)}>
+                ♪ {tr('开始声音')}
+              </button>
+            )}
+            <Slider value={t.masterVolume} min={0} max={MASTER_MAX} step={0.01} format={(v) => pct(v / MASTER_MAX)}
+              onChange={(v) => setT({ masterVolume: v })} />
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button style={{ ...toggleButtonStyle(t.masterVolume === 0), fontSize: '10px', padding: '2px 8px' }} onClick={mute}>
+                {t.masterVolume === 0 ? tr('取消静音') : tr('静音')}
+              </button>
+              <button style={{ ...toggleButtonStyle(advanced), fontSize: '10px', padding: '2px 8px' }} onClick={() => setAdvanced((v) => !v)}>
+                {tr('高级')}
+              </button>
+            </div>
+          </Row>
+          <Row label={tr('密度')}>
+            <Slider value={t.musicDensity} min={0} max={1} step={0.05} format={pct} onChange={(v) => setT({ musicDensity: v })} />
+          </Row>
+          {advanced && (
+            <>
+              <Row label={tr('调中心（参考值）')}>
+                <Slider value={t.tonalCenterMidi} min={38} max={62} step={1} format={(v) => `${v}`} onChange={(v) => setT({ tonalCenterMidi: v })} />
+              </Row>
+              <Row label={tr('八度偏移')}>
+                <Slider value={t.octaveBias} min={-1} max={1} step={1} format={(v) => `${v > 0 ? '+' : ''}${v}`} onChange={(v) => setT({ octaveBias: v })} />
+              </Row>
+              <div style={{ fontSize: '9px', color: UI.textMuted, lineHeight: 1.6 }}>{tr('五音是相对的调式功能，整个音景可整体移调；参考值不代表史实音高。')}</div>
+            </>
+          )}
           <Row label={tr('时间来源')}>
             <Choice<TimeSource> value={t.timeSource} onChange={(v) => setT({ timeSource: v })}
               options={[['LOCAL_REAL_TIME', tr('本地时间')], ['MANUAL_SHICHEN', tr('手动时辰')], ['PREVIEW_24H_CYCLE', tr('24 小时预览')]]} />
@@ -512,6 +568,26 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
   }, [tcfg.enabled, tcfg.timeSource, tcfg.manualIndex, tcfg.previewCycleMinutes, tcfg.transitionMinutes]);
   useEffect(() => () => temporalStore.reset(), []);
 
+  // ── 音景：开启且音频已在运行时挂上；关闭或音频未获手势时摘下。音量/密度/调中心实时跟随。 ──
+  const audioState = useLiveAudioState();
+  useEffect(() => {
+    if (tcfg.enabled && audioState === 'running') {
+      soundscapeController.attach({ density: tcfg.musicDensity, centerMidi: tcfg.tonalCenterMidi, octaveBias: tcfg.octaveBias });
+    } else {
+      soundscapeController.detach();
+    }
+  }, [tcfg.enabled, audioState]);   // eslint-disable-line react-hooks/exhaustive-deps -- 参数由下一个 effect 跟随
+  useEffect(() => {
+    soundscapeController.setParams({ density: tcfg.musicDensity, centerMidi: tcfg.tonalCenterMidi, octaveBias: tcfg.octaveBias });
+  }, [tcfg.musicDensity, tcfg.tonalCenterMidi, tcfg.octaveBias]);
+  useEffect(() => { liveAudio.setVolume(tcfg.masterVolume); }, [tcfg.masterVolume]);
+  useEffect(() => {
+    const onVis = () => { void liveAudio.onVisibility(document.visibilityState === 'visible'); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+  useEffect(() => () => { soundscapeController.detach(); void liveAudio.stop(1); }, []);
+
   const set = useCallback((patch: (d: ScreensaverSettings) => ScreensaverSettings) => {
     setSettings((d) => { const n = patch(d); saveSettings(n); return n; });
   }, []);
@@ -625,6 +701,12 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
       {/* 设置 / 全屏（右下，极淡） */}
       <div style={{ position: 'fixed', right: '18px', bottom: '16px', zIndex: 125, display: 'flex', gap: '6px',
                     opacity: showUi ? 1 : 0, transition: 'opacity 0.6s', pointerEvents: showUi ? 'auto' : 'none' }}>
+        {settings.temporal.enabled && audioState !== 'running' && LiveAudio.supported() && (
+          <button style={{ ...toggleButtonStyle(false), fontSize: '12px', padding: '4px 10px', opacity: 0.7, borderColor: UI.accent, color: UI.accent }}
+                  onClick={() => void liveAudio.start(settings.temporal.masterVolume)} title={tr('声音需要一次点击才能开始')}>
+            ♪ {tr('开始声音')}
+          </button>
+        )}
         <button style={{ ...toggleButtonStyle(fullscreen), fontSize: '12px', padding: '4px 10px', opacity: 0.28 }}
                 onMouseEnter={(e) => (e.currentTarget.style.opacity = '0.9')}
                 onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.28')}
