@@ -58,8 +58,9 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
 
     public override func startAnimation() {
         super.startAnimation()
-        // 声音归主显示器（坐标原点 (0,0) 的那块）；1.5 s 后仍无人认领则由本实例兜底
-        let onPrimary = (window?.screen ?? NSScreen.main).map { $0.frame.origin == .zero } ?? false
+        // 声音归主显示器：以窗口原点 (0,0) 判断——宿主里 window.screen 在启动瞬间可能一律报主屏，不可靠；
+        // 1.5 s 后仍无人认领（无主屏实例）则由本实例兜底
+        let onPrimary = (window?.frame.origin ?? CGPoint(x: -1, y: -1)) == .zero
         if !playsAudio && fillsAScreen && !CosmicMeridianView.audioOwnerAssigned && onPrimary {
             CosmicMeridianView.audioOwnerAssigned = true
             playsAudio = true
