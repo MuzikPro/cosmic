@@ -90,6 +90,32 @@ export function buildGraph(ctx: BaseAudioContext, target: AudioNode = ctx.destin
 export type LiveState = 'idle' | 'running' | 'suspended' | 'blocked';
 
 /**
+ * iOS（Safari 与 iPhone 上的 Chrome 都是 WebKit）：Web Audio 默认走"环境音"会话，
+ * 响铃/静音拨片拨到静音就没有声音（owner 2026-09-05 实测 iPhone Chrome 无声）。
+ * 两手准备：① iOS 17+ 的 Audio Session API 声明 playback；② 老办法——手势里播放一个循环的
+ * 无声 <audio>，把会话切到媒体播放通道。桌面浏览器上两者都无害。
+ */
+const SILENT_WAV = 'data:audio/wav;base64,UklGRvQHAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YdAHAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+function declarePlaybackSession(): void {
+  try {
+    const nav = navigator as Navigator & { audioSession?: { type: string } };
+    if (nav.audioSession) nav.audioSession.type = 'playback';
+  } catch { /* 不支持 */ }
+}
+let silentEl: HTMLAudioElement | null = null;
+function unlockMediaChannel(): void {
+  try {
+    if (!silentEl) {
+      silentEl = document.createElement('audio');
+      silentEl.src = SILENT_WAV; silentEl.loop = true; silentEl.volume = 0.01;
+      silentEl.setAttribute('playsinline', ''); silentEl.setAttribute('aria-hidden', 'true');
+    }
+    void silentEl.play().catch(() => undefined);
+  } catch { /* 无 DOM */ }
+}
+function releaseMediaChannel(): void { try { silentEl?.pause(); } catch { /* ignore */ } }
+
+/**
  * 实时播放的生命周期：手势里 start()，淡入；stop() 淡出后挂起；页面隐藏时静默挂起、回到前台恢复。
  * 订阅者（界面的"开始声音"角标）通过 subscribe 得到状态变化。
  */
@@ -112,6 +138,8 @@ export class LiveAudio {
   /** 必须在用户手势的调用栈里调用；返回是否已在运行 */
   async start(volume = this.volume): Promise<boolean> {
     this.volume = Math.min(MASTER_MAX, Math.max(0, volume));
+    declarePlaybackSession();
+    unlockMediaChannel();      // 必须在手势调用栈里
     try {
       if (!this.ctx) {
         const Ctor = (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext);
@@ -148,6 +176,7 @@ export class LiveAudio {
     g.linearRampToValueAtTime(0, t + fade);
     await new Promise((r) => setTimeout(r, fade * 1000 + 50));
     if (this.ctx.state === 'running') await this.ctx.suspend().catch(() => undefined);
+    releaseMediaChannel();
     this.syncState();
   }
 
