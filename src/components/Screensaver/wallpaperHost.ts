@@ -6,6 +6,9 @@
 import type { ScreensaverSettings } from './screensaverSettings';
 
 export const IS_WALLPAPER_BUILD = import.meta.env.VITE_WALLPAPER === '1';
+/** 由原生屏保宿主承载（?saver=1）：宿主掌管生命周期与可见性——页面不因 visibilitychange 停声，
+ *  渲染循环改由定时器驱动（宿主里 WebKit 可能判定页面不可见而停掉 requestAnimationFrame） */
+export const HOSTED_BY_SAVER = typeof location !== 'undefined' && new URLSearchParams(location.search).get('saver') === '1';
 /** 无手势也尝试起音：壁纸构建，或宿主用 ?autoplay=1 声明它允许自动播放（macOS .saver、kiosk） */
 export const AUTOPLAY_REQUESTED = IS_WALLPAPER_BUILD ||
   (typeof location !== 'undefined' && new URLSearchParams(location.search).get('autoplay') === '1');

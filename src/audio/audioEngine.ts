@@ -129,11 +129,11 @@ export class LiveAudio {
   get state(): LiveState { return this._state; }
   get audioGraph(): AudioGraph | null { return this.graph; }
   subscribe = (fn: () => void): (() => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
+  private mark(s: string): void { try { (window as unknown as { __cosmicAudioState?: string }).__cosmicAudioState = s; } catch { /* no window */ } }
   private setState(s: LiveState): void {
+    this.mark(s);   // 宿主（macOS .saver）诊断用：页面侧可读的音频状态
     if (this._state !== s) {
       this._state = s;
-      // 宿主（macOS .saver）诊断用：页面侧可读的音频状态
-      try { (window as unknown as { __cosmicAudioState?: string }).__cosmicAudioState = s; } catch { /* no window */ }
       this.listeners.forEach((l) => l());
     }
   }
@@ -154,7 +154,13 @@ export class LiveAudio {
         this.graph = buildGraph(this.ctx, this.ctx.destination, 0);
         this.ctx.addEventListener('statechange', () => this.syncState());
       }
-      if (this.ctx.state !== 'running') await this.ctx.resume();
+      if (this.ctx.state !== 'running') {
+        // WebKit：无手势时 resume() 的 promise 会一直挂起——3 s 后把这个事实暴露给宿主诊断
+        this.mark('resuming');
+        const pending = window.setTimeout(() => this.mark(`resume-pending(ctx=${this.ctx?.state})`), 3000);
+        await this.ctx.resume();
+        window.clearTimeout(pending);
+      }
       const g = this.graph!.master.gain;
       const t = this.ctx.currentTime;
       g.cancelScheduledValues(t); g.setValueAtTime(g.value, t);

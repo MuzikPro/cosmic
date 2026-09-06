@@ -26,7 +26,7 @@ import { vesselWeightsFromVisible } from '@pack';
 import { TemporalDebugPanel, isDebugEnabled } from './TemporalDebugPanel';
 import type { SpatialMode } from '@/temporal/types';
 import { useEnvironment } from './useEnvironment';
-import { AUTOPLAY_REQUESTED, installWallpaperHost } from './wallpaperHost';
+import { AUTOPLAY_REQUESTED, HOSTED_BY_SAVER, installWallpaperHost } from './wallpaperHost';
 import type { TriState } from './screensaverSettings';
 
 /**
@@ -166,12 +166,30 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef, calmRef }: {
   return null;
 }
 
+/** 原生宿主（?saver=1）：不用 requestAnimationFrame——宿主里 WebKit 可能判定页面不可见而停掉 rAF；
+ *  改为 frameloop='never' + 定时器 advance()，每秒记录实际帧数供宿主诊断 */
+function HostFrameDriver() {
+  const setFrameloop = useThree((s) => s.setFrameloop);
+  const advance = useThree((s) => s.advance);
+  useEffect(() => {
+    setFrameloop('never');
+    let frames = 0;
+    const tick = window.setInterval(() => { advance(performance.now()); frames++; }, 1000 / 30);
+    const meter = window.setInterval(() => {
+      (window as unknown as { __cosmicFps?: number }).__cosmicFps = frames; frames = 0;
+    }, 1000);
+    return () => { window.clearInterval(tick); window.clearInterval(meter); setFrameloop('always'); };
+  }, [setFrameloop, advance]);
+  return null;
+}
+
 /** 省电：像素比 1、按需帧循环 + 30 Hz 触发（≈ 半数 GPU 工作）；关闭时恢复 always / [1,1.5] */
 function PowerDriver({ saver }: { saver: boolean }) {
   const setDpr = useThree((s) => s.setDpr);
   const setFrameloop = useThree((s) => s.setFrameloop);
   const invalidate = useThree((s) => s.invalidate);
   useEffect(() => {
+    if (HOSTED_BY_SAVER) { setDpr(1); return undefined; }   // 宿主模式：帧循环由 HostFrameDriver 掌管
     if (saver) {
       setDpr(1);
       setFrameloop('demand');
@@ -642,6 +660,7 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
     if (AUTOPLAY_REQUESTED && tcfg.enabled && audioState !== 'running' && LiveAudio.supported()) void liveAudio.start(tcfg.masterVolume);
   }, [tcfg.enabled]);   // eslint-disable-line react-hooks/exhaustive-deps -- 只在开启时试一次；被拦则角标照常
   useEffect(() => {
+    if (HOSTED_BY_SAVER) return undefined;   // 宿主掌管生命周期；其 WebKit 的可见性判断不可信
     const onVis = () => { void liveAudio.onVisibility(document.visibilityState === 'visible'); };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
@@ -730,6 +749,7 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
         <Driver settingsRef={settingsRef} rigRef={rigRef} manualRef={manualRef} controlsRef={controlsRef} calmRef={calmRef} />
         <TemporalDriver refs={emphasisRefs} settingsRef={settingsRef} />
         <PowerDriver saver={saver} />
+        {HOSTED_BY_SAVER && <HostFrameDriver />}
         <OrbitControls
           ref={controlsRef as never}
           enabled={settings.manualInteraction}
