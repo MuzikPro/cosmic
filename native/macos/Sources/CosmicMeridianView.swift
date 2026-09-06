@@ -10,6 +10,9 @@
 //  Settings the site itself keeps (localStorage) persist in the host process's web data store.
 import ScreenSaver
 import WebKit
+import os.log
+
+private let log = OSLog(subsystem: "com.3dqiflow.cosmic.saver", category: "saver")
 
 @objc(CosmicMeridianView)
 public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
@@ -19,9 +22,15 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
     private var playsAudio = false
     private var triedOffline = false
     private var watchdog: Timer?
+    // 影像中继（macOS 14+）：legacyScreenSaver 宿主里 WKWebView 的远程合成层显示为黑，
+    // 声音却在——网页进程在跑。于是把网页画面按 ~24 fps 快照到本视图的图层上。
+    // 可用 defaults -currentHost write com.3dqiflow.cosmic.saver relay -bool false 关闭。
+    private let relay = CALayer()
+    private var snapshotInFlight = false
+    private var snapshotsDelivered = 0
     private lazy var defaults: ScreenSaverDefaults = {
         let d = ScreenSaverDefaults(forModuleWithName: Bundle(for: CosmicMeridianView.self).bundleIdentifier ?? "com.3dqiflow.cosmic.saver")!
-        d.register(defaults: ["source": "online", "sound": true, "volume": 20])
+        d.register(defaults: ["source": "online", "sound": true, "volume": 20, "relay": true])
         return d
     }()
     private lazy var sheet: NSWindow = makeSheet()
@@ -31,17 +40,18 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
 
     public override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
-        animationTimeInterval = 1.0
+        animationTimeInterval = 1.0 / 24.0
         wantsLayer = true
         layer?.backgroundColor = NSColor(red: 0.06, green: 0.06, blue: 0.10, alpha: 1).cgColor
         // audio ownership is decided in startAnimation, once the view's real size and screen are known
+        os_log("init frame=%{public}@ isPreview=%{public}d", log: log, type: .default, NSStringFromRect(frame), isPreview ? 1 : 0)
     }
     deinit { teardown() }
 
     /** 真正的屏保视图铺满一块屏幕；System Settings 的预览格子很小（且 isPreview 可能为 false） */
     private var fillsAScreen: Bool {
         guard !isPreview, let screen = window?.screen ?? NSScreen.main else { return false }
-        let f = window?.frame ?? frame
+        let f = bounds.size
         return f.width >= screen.frame.width * 0.6 && f.height >= screen.frame.height * 0.6
     }
     required init?(coder: NSCoder) { super.init(coder: coder) }
@@ -52,11 +62,15 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
             CosmicMeridianView.audioOwnerAssigned = true
             playsAudio = true
         }
+        os_log("startAnimation bounds=%{public}@ window=%{public}@ screen=%{public}@ fills=%{public}d audio=%{public}d visible=%{public}d",
+               log: log, type: .default, NSStringFromSize(bounds.size), window.map { NSStringFromRect($0.frame) } ?? "nil",
+               (window?.screen ?? NSScreen.main).map { NSStringFromRect($0.frame) } ?? "nil", fillsAScreen ? 1 : 0, playsAudio ? 1 : 0, (window?.isVisible ?? false) ? 1 : 0)
         if webView == nil { buildWebView() }
         startWatchdog()
     }
     public override func stopAnimation() {
         super.stopAnimation()
+        os_log("stopAnimation", log: log, type: .default)
         teardown()
     }
     public override func viewDidMoveToWindow() {
@@ -64,17 +78,36 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         if window == nil { teardown() }
     }
     public override func viewDidHide() { super.viewDidHide(); teardown() }
-    /** 每 2 s 检查一次：离开窗口、被隐藏、窗口不可见 → 立即拆除（停声、释放 WebGL） */
+    /** 每 2 s 检查一次：离开窗口或被隐藏（连续两次）→ 拆除（停声、释放 WebGL）。
+     *  不看 isVisible / occlusionState：屏保在远程宿主进程里渲染时这两个值不可信（会误判成不可见）。 */
+    private var strikes = 0
     private func startWatchdog() {
-        watchdog?.invalidate()
+        watchdog?.invalidate(); strikes = 0
         watchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             guard let self = self else { return }
-            if self.window == nil || self.isHiddenOrHasHiddenAncestor || self.window?.isVisible == false || self.window?.occlusionState.contains(.visible) == false {
-                self.teardown()
+            let gone = self.window == nil || self.isHiddenOrHasHiddenAncestor
+            self.strikes = gone ? self.strikes + 1 : 0
+            if self.strikes >= 2 { os_log("watchdog teardown (window=%{public}d hidden=%{public}d)", log: log, type: .default, self.window == nil ? 0 : 1, self.isHiddenOrHasHiddenAncestor ? 1 : 0); self.teardown() }
+        }
+    }
+    public override func animateOneFrame() {
+        guard defaults.bool(forKey: "relay"), let wv = webView, !snapshotInFlight else { return }
+        snapshotInFlight = true
+        let cfg = WKSnapshotConfiguration()
+        cfg.afterScreenUpdates = false
+        wv.takeSnapshot(with: cfg) { [weak self] image, _ in
+            guard let self = self else { return }
+            self.snapshotInFlight = false
+            guard let cg = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return }
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            self.relay.contents = cg
+            CATransaction.commit()
+            self.snapshotsDelivered += 1
+            if self.snapshotsDelivered == 1 || self.snapshotsDelivered % 240 == 0 {
+                os_log("relay snapshot #%{public}d %{public}dx%{public}d", log: log, type: .default, self.snapshotsDelivered, cg.width, cg.height)
             }
         }
     }
-    public override func animateOneFrame() { /* WKWebView renders itself */ }
     public override func draw(_ rect: NSRect) {
         NSColor(red: 0.06, green: 0.06, blue: 0.10, alpha: 1).setFill()
         rect.fill()
@@ -92,6 +125,13 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         wv.setValue(false, forKey: "drawsBackground")
         addSubview(wv)
         webView = wv
+        if defaults.bool(forKey: "relay") {
+            relay.frame = bounds
+            relay.contentsGravity = .resizeAspectFill
+            relay.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+            relay.backgroundColor = NSColor(red: 0.06, green: 0.06, blue: 0.10, alpha: 1).cgColor
+            layer?.addSublayer(relay)
+        }
         load(into: wv, offline: defaults.string(forKey: "source") == "offline")
     }
     private func query() -> String {
@@ -115,8 +155,10 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         }
     }
     // Offline fallback when the network is unavailable
-    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { fallback() }
-    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fallback() }
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { os_log("provisional load failed: %{public}@", log: log, type: .error, error.localizedDescription); fallback() }
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { os_log("load failed: %{public}@", log: log, type: .error, error.localizedDescription); fallback() }
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { os_log("loaded %{public}@", log: log, type: .default, webView.url?.absoluteString ?? "?") }
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { os_log("web content process terminated — reloading", log: log, type: .error); load(into: webView, offline: triedOffline) }
     private func fallback() {
         guard let wv = webView, !triedOffline, offlineIndex() != nil else { return }
         load(into: wv, offline: true)
@@ -131,6 +173,9 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         wv.removeFromSuperview()
         webView = nil
         triedOffline = false
+        relay.contents = nil
+        relay.removeFromSuperlayer()
+        snapshotsDelivered = 0
     }
 
     // MARK: configure sheet
