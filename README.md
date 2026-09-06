@@ -57,6 +57,14 @@ choices. Nothing here treats, diagnoses, or "activates" anything.
 - **Any browser** — press ⛶ (or F11 / ⌃⌘F) for fullscreen. The page keeps the screen awake.
 - **Phone / tablet home screen** — Safari or Chrome → *Add to Home Screen*. It launches
   fullscreen without browser chrome (web app manifest, `display: fullscreen`).
+- **macOS screen saver (native)** — download `CosmicMeridian-macOS-<version>.saver.zip` from
+  [Releases](https://github.com/MuzikPro/cosmic/releases), unzip, double-click the `.saver` →
+  System Settings → Screen Saver. It is a `WKWebView` in a `ScreenSaverView` (`native/macos/`,
+  `./build.sh`): *Options…* picks Online (live site, always current; falls back to the bundled
+  build offline) or Offline (bundled), sound on/off and volume. Only the main display plays
+  audio. The build is ad-hoc signed: on first open macOS may ask you to allow it in
+  System Settings → Privacy & Security (or right-click → Open). The small preview tile in
+  System Settings can stay dark on recent macOS; the real saver works.
 - **macOS desktop wallpaper** — [Plash](https://github.com/sindresorhus/Plash) (free, open
   source) shows any URL as your wallpaper: add `https://cosmic.3dqiflow.com`.
 - **Windows, offline** — download `cosmic-meridian-wallpaper-<version>.zip` from
@@ -67,8 +75,10 @@ choices. Nothing here treats, diagnoses, or "activates" anything.
   and power saver are exposed as wallpaper properties, and sound autoplays there.
   **Lively**: *Add wallpaper* → choose the folder or zip. Both also accept the live URL instead.
 - **Kiosk / wall display** — any Chromium in `--kiosk https://cosmic.3dqiflow.com`; a
-  Raspberry Pi 4/5 runs it at 1080p.
-- Native screensaver wrappers (macOS `.saver`, Electron) are on the wish-list — PRs welcome.
+  Raspberry Pi 4/5 runs it at 1080p. Hosts can preset everything through the URL, e.g.
+  `?sound=1&autoplay=1&volume=20&overlay=OFF&mode=combined&flow=0.1&vessels=1&lang=zh`
+  (`power=on|off|auto`, `calm=on|off|auto`, `opacity=0.05–0.6`); `autoplay=1` tells the page the
+  host allows audio without a click.
 
 ## Open core: what is open, what is not
 

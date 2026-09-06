@@ -62,8 +62,9 @@ const MODEL_VERSION = 'ac180c470b';
 const MODEL_VERSION_F = 'e0babc992b';
 // 相对 Vite base 取模型：默认 base '/' 时与从前完全一致；打包成本地壁纸（base './'，file:// 运行）时也能找到
 const PUBLIC_BASE = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
-const MODEL_URL = `${PUBLIC_BASE}models/body-skin.glb?v=${MODEL_VERSION}`;
-const MODEL_URL_F = `${PUBLIC_BASE}models/body-skin-f.glb?v=${MODEL_VERSION_F}`;
+// 离线打包（file:// 下 fetch 被拦）可用 VITE_BODY_MODEL_URL / VITE_BODY_MODEL_URL_F 注入 data: URL；网页构建不设即原样
+const MODEL_URL: string = (import.meta.env.VITE_BODY_MODEL_URL as string | undefined) || `${PUBLIC_BASE}models/body-skin.glb?v=${MODEL_VERSION}`;
+const MODEL_URL_F: string = (import.meta.env.VITE_BODY_MODEL_URL_F as string | undefined) || `${PUBLIC_BASE}models/body-skin-f.glb?v=${MODEL_VERSION_F}`;
 
 /** 男/女体表。两具都来自 NIH 3D / Visible Human，同一套归一化（脚底 y=-3.2、头顶 y=3.5）。 */
 export type BodySex = 'male' | 'female';

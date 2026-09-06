@@ -26,7 +26,7 @@ import { vesselWeightsFromVisible } from '@pack';
 import { TemporalDebugPanel, isDebugEnabled } from './TemporalDebugPanel';
 import type { SpatialMode } from '@/temporal/types';
 import { useEnvironment } from './useEnvironment';
-import { IS_WALLPAPER_BUILD, installWallpaperHost } from './wallpaperHost';
+import { AUTOPLAY_REQUESTED, installWallpaperHost } from './wallpaperHost';
 import type { TriState } from './screensaverSettings';
 
 /**
@@ -639,7 +639,7 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
   }, [tcfg.musicDensity, tcfg.tonalCenterMidi, tcfg.octaveBias, vessels, tcfg.spatialMode]);
   useEffect(() => { liveAudio.setVolume(tcfg.masterVolume); }, [tcfg.masterVolume]);
   useEffect(() => {
-    if (IS_WALLPAPER_BUILD && tcfg.enabled && audioState !== 'running' && LiveAudio.supported()) void liveAudio.start(tcfg.masterVolume);
+    if (AUTOPLAY_REQUESTED && tcfg.enabled && audioState !== 'running' && LiveAudio.supported()) void liveAudio.start(tcfg.masterVolume);
   }, [tcfg.enabled]);   // eslint-disable-line react-hooks/exhaustive-deps -- 只在开启时试一次；被拦则角标照常
   useEffect(() => {
     const onVis = () => { void liveAudio.onVisibility(document.visibilityState === 'visible'); };

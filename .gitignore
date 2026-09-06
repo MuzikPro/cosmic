@@ -18,3 +18,4 @@ coverage/
 
 # private sound pack (overlaid at build time, or cloned locally)
 src/audio/pack/
+native/macos/build/

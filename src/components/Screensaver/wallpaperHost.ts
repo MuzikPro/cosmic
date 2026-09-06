@@ -6,6 +6,9 @@
 import type { ScreensaverSettings } from './screensaverSettings';
 
 export const IS_WALLPAPER_BUILD = import.meta.env.VITE_WALLPAPER === '1';
+/** 无手势也尝试起音：壁纸构建，或宿主用 ?autoplay=1 声明它允许自动播放（macOS .saver、kiosk） */
+export const AUTOPLAY_REQUESTED = IS_WALLPAPER_BUILD ||
+  (typeof location !== 'undefined' && new URLSearchParams(location.search).get('autoplay') === '1');
 
 type Patch = (fn: (d: ScreensaverSettings) => ScreensaverSettings) => void;
 
