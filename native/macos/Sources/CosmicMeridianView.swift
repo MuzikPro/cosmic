@@ -1,8 +1,13 @@
 //  天人 · Cosmic Meridian — macOS screen saver (owner 2026-09-05).
 //  A ScreenSaverView hosting a WKWebView. Source: the live site (default) or the offline build
-//  bundled in Resources/web. Only the first (main-display) instance plays sound; the others are
-//  visual-only so multi-monitor setups don't stack audio. Settings the site itself keeps
-//  (localStorage) persist in the screen-saver process's own web data store.
+//  bundled in Resources/web. Sound rules (owner 2026-09-05, after the "can't stop the sound" bug):
+//    • only a view that fills (≥ 60 % of) a screen may play audio — System Settings hosts the
+//      saver for its preview tile with isPreview == false since Sonoma, so isPreview alone is not
+//      enough; the tile is small, the real saver is full-screen;
+//    • only the first such instance (main display) plays; other displays are visual-only;
+//    • a watchdog tears the web view down as soon as the view leaves its window or is hidden,
+//      because the legacy host does not reliably call stopAnimation for previews.
+//  Settings the site itself keeps (localStorage) persist in the host process's web data store.
 import ScreenSaver
 import WebKit
 
@@ -13,6 +18,7 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
     private var webView: WKWebView?
     private var playsAudio = false
     private var triedOffline = false
+    private var watchdog: Timer?
     private lazy var defaults: ScreenSaverDefaults = {
         let d = ScreenSaverDefaults(forModuleWithName: Bundle(for: CosmicMeridianView.self).bundleIdentifier ?? "com.3dqiflow.cosmic.saver")!
         d.register(defaults: ["source": "online", "sound": true, "volume": 20])
@@ -28,21 +34,45 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         animationTimeInterval = 1.0
         wantsLayer = true
         layer?.backgroundColor = NSColor(red: 0.06, green: 0.06, blue: 0.10, alpha: 1).cgColor
-        if !isPreview && !CosmicMeridianView.audioOwnerAssigned {
-            CosmicMeridianView.audioOwnerAssigned = true
-            playsAudio = true
-        }
+        // audio ownership is decided in startAnimation, once the view's real size and screen are known
+    }
+    deinit { teardown() }
+
+    /** 真正的屏保视图铺满一块屏幕；System Settings 的预览格子很小（且 isPreview 可能为 false） */
+    private var fillsAScreen: Bool {
+        guard !isPreview, let screen = window?.screen ?? NSScreen.main else { return false }
+        let f = window?.frame ?? frame
+        return f.width >= screen.frame.width * 0.6 && f.height >= screen.frame.height * 0.6
     }
     required init?(coder: NSCoder) { super.init(coder: coder) }
 
     public override func startAnimation() {
         super.startAnimation()
+        if !playsAudio && fillsAScreen && !CosmicMeridianView.audioOwnerAssigned {
+            CosmicMeridianView.audioOwnerAssigned = true
+            playsAudio = true
+        }
         if webView == nil { buildWebView() }
+        startWatchdog()
     }
     public override func stopAnimation() {
         super.stopAnimation()
         teardown()
-        if playsAudio { CosmicMeridianView.audioOwnerAssigned = false; playsAudio = false }
+    }
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { teardown() }
+    }
+    public override func viewDidHide() { super.viewDidHide(); teardown() }
+    /** 每 2 s 检查一次：离开窗口、被隐藏、窗口不可见 → 立即拆除（停声、释放 WebGL） */
+    private func startWatchdog() {
+        watchdog?.invalidate()
+        watchdog = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            if self.window == nil || self.isHiddenOrHasHiddenAncestor || self.window?.isVisible == false || self.window?.occlusionState.contains(.visible) == false {
+                self.teardown()
+            }
+        }
     }
     public override func animateOneFrame() { /* WKWebView renders itself */ }
     public override func draw(_ rect: NSRect) {
@@ -92,12 +122,15 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         load(into: wv, offline: true)
     }
     private func teardown() {
+        watchdog?.invalidate(); watchdog = nil
+        if playsAudio { CosmicMeridianView.audioOwnerAssigned = false; playsAudio = false }
         guard let wv = webView else { return }
         wv.stopLoading()
         wv.loadHTMLString("", baseURL: nil)     // stops audio and frees the WebGL context
         wv.navigationDelegate = nil
         wv.removeFromSuperview()
         webView = nil
+        triedOffline = false
     }
 
     // MARK: configure sheet
