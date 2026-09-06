@@ -58,7 +58,9 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
 
     public override func startAnimation() {
         super.startAnimation()
-        if !playsAudio && fillsAScreen && !CosmicMeridianView.audioOwnerAssigned {
+        // 声音归主显示器（坐标原点 (0,0) 的那块）；1.5 s 后仍无人认领则由本实例兜底
+        let onPrimary = (window?.screen ?? NSScreen.main).map { $0.frame.origin == .zero } ?? false
+        if !playsAudio && fillsAScreen && !CosmicMeridianView.audioOwnerAssigned && onPrimary {
             CosmicMeridianView.audioOwnerAssigned = true
             playsAudio = true
         }
@@ -66,6 +68,15 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
                log: log, type: .default, NSStringFromSize(bounds.size), window.map { NSStringFromRect($0.frame) } ?? "nil",
                (window?.screen ?? NSScreen.main).map { NSStringFromRect($0.frame) } ?? "nil", fillsAScreen ? 1 : 0, playsAudio ? 1 : 0, (window?.isVisible ?? false) ? 1 : 0)
         if webView == nil { buildWebView() }
+        if !playsAudio && fillsAScreen {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self = self, self.webView != nil, !CosmicMeridianView.audioOwnerAssigned else { return }
+                CosmicMeridianView.audioOwnerAssigned = true
+                self.playsAudio = true
+                os_log("audio fallback claimed by non-primary instance", log: log, type: .default)
+                if let wv = self.webView { self.load(into: wv, offline: self.triedOffline) }
+            }
+        }
         startWatchdog()
     }
     public override func stopAnimation() {
