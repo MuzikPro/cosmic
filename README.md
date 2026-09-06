@@ -32,7 +32,7 @@ Off by default. Turn it on in ⚙ → *Time & Sound* and the page becomes time-a
 - **Meridian clock** — your local time selects the current 时辰 (two-hour period) and its
   meridian (子 Gallbladder → 丑 Liver → 寅 Lung → … → 亥 Triple Energizer). That channel is
   gently emphasized; the other eleven stay alive. Transitions crossfade over 5–20 minutes.
-- **Generative soundscape** — synthesized in the browser with Web Audio, no samples, no loop.
+- **Generative soundscape** — synthesized in the browser with Web Audio, no samples, no loop (engine open source; the composition is the private sound pack, see below).
   A sub-perceptual 宫 (Gong) foundation holds the centre; the Five Tone traditionally
   associated with the current meridian (宫商角徵羽 ↔ 土金木火水) becomes the modal centre,
   with sparse motifs that rise for Wood, float for Fire, hold for Earth, descend for Metal
@@ -61,14 +61,27 @@ choices. Nothing here treats, diagnoses, or "activates" anything.
   Raspberry Pi 4/5 runs it at 1080p.
 - Native screensaver wrappers (macOS `.saver`, Electron) are on the wish-list — PRs welcome.
 
+## Open core: what is open, what is not
+
+- **Open (MIT)**: the whole visualization, the meridian clock (`src/temporal/`), and the audio
+  *engine* — Web Audio graph, synth voices, scheduler, controller (`src/audio/`), plus a plain
+  **reference sound pack** (`src/audio/fallback/`) so this repo builds and plays on its own.
+- **Not open**: the *composition* — element characters and day/night palettes, the harmonic
+  progression and 时辰 cadence, the eight-vessel modulation map, and the level balance. That is
+  the private `cosmic-sound` pack, overlaid into `src/audio/pack/` at deploy time by
+  `scripts/fetch-sound-pack.mjs`. cosmic.3dqiflow.com runs with it; a local build without it
+  runs the reference pack and says so in the debug panel (`?debug`).
+- Same model as the engine's content pack: see `NOTICE.md`.
+
 ## Where it comes from
 
 This is the *Cosmic / 天人* page of [3DQiFlow](https://www.3dqiflow.com)
 ([MuzikPro/3dqiflow](https://github.com/MuzikPro/3dqiflow)) lifted into a one-page site.
 The body (NIH Visible Human derived), the meridian polylines, the acupoint registry and
-the flow animation are the **same sources**; only `src/App.tsx` and `index.html` are
-specific to this site. Engine changes land in 3dqiflow first and are copied here —
-please open engine issues and PRs there.
+the flow animation are the **same sources** and are copied verbatim from 3dqiflow (please
+open engine issues and PRs there). The screensaver itself, the meridian clock
+(`src/temporal/`) and the audio engine (`src/audio/`) live **here** and are the source of
+truth for this site.
 
 Meridian routes are schematic teaching geometry, not clinical landmarks: see
 [NOTICE.md](NOTICE.md) and [public/models/README.md](public/models/README.md) for

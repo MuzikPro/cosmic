@@ -5,7 +5,7 @@ import { useTemporalState } from '@/temporal/temporalStore';
 import { SLOT_SECONDS, secondsOfDay, slotStartSeconds } from '@/temporal/shichen';
 import type { TemporalSoundscapeSettings } from '@/temporal/types';
 import { liveAudio } from '@/audio/audioEngine';
-import { computeModulation, coupledWeights, vesselWeightsFromVisible } from '@/audio/vesselModulator';
+import { describeModulation, vesselWeightsFromVisible } from '@pack';
 
 /**
  * 开发/调试面板（spec §48–49）：只在 ?debug 或开发构建下出现，不进普通屏保界面。
@@ -44,7 +44,7 @@ export function TemporalDebugPanel({ t, setT, offset, setOffset, visible }: {
     setT({ timeSource: 'MANUAL_SHICHEN', manualIndex: (idx + d + 12) % 12 });
   };
   const vw = vesselWeightsFromVisible(visible, t.vesselModulation);
-  const mod = st ? computeModulation(coupledWeights(vw, st.entry.polarity), t.spatialMode) : null;
+  const modText = st ? describeModulation(visible, t.vesselModulation, t.spatialMode, st.entry.polarity) : null;
   const row = (k: string, v: string) => (
     <div key={k} style={{ display: 'flex', gap: '8px' }}><span style={{ color: UI.textMuted, minWidth: '92px' }}>{k}</span><span>{v}</span></div>
   );
@@ -68,7 +68,7 @@ export function TemporalDebugPanel({ t, setT, offset, setOffset, visible }: {
       {row('audio', `${audio} · vol ${t.masterVolume.toFixed(2)} · density ${t.musicDensity.toFixed(2)} · center ${t.tonalCenterMidi} · oct ${t.octaveBias}`)}
       {row('preview', `${t.previewCycleMinutes} min / day · transition ${t.transitionMinutes} min`)}
       {row('vessels', Object.entries(vw).map(([k, v]) => `${k}:${v.toFixed(2)}`).join(' '))}
-      {mod && row('modulation', `orbit ${mod.orbitDepth.toFixed(2)}@${Math.round(mod.orbitPeriod)}s · pulse ${mod.bedTremoloDepth.toFixed(2)}@${mod.bedTremoloPeriod.toFixed(1)}s · pan ${mod.eventPanBias.toFixed(2)} · cutoff ×${mod.bedCutoffMul.toFixed(2)}`)}
+      {modText && row('modulation', modText)}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '6px' }}>
         {b('◀ shichen', () => step(-1))}{b('shichen ▶', () => step(1))}
         {b('boundary −10m', () => jump(-600))}{b('−1m', () => jump(-60))}{b('boundary', () => jump(0))}{b('+1m', () => jump(60))}

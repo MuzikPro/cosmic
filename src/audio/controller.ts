@@ -4,13 +4,14 @@
  */
 import { temporalStore } from '@/temporal/temporalStore';
 import { liveAudio } from './audioEngine';
-import { Soundscape, SoundscapeParams } from './soundscape';
+import { createSoundscape } from '@pack';
+import type { SoundscapeLike, SoundscapeParams } from './types';
 
 const TICK_MS = 100;
 const AHEAD_S = 1.0;
 
 class SoundscapeController {
-  private scape: Soundscape | null = null;
+  private scape: SoundscapeLike | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private unsub: (() => void) | null = null;
   private planned = 0;
@@ -22,7 +23,7 @@ class SoundscapeController {
     const g = liveAudio.audioGraph;
     if (!g || this.scape) return this.scape !== null;
     const ctx = g.ctx;
-    this.scape = new Soundscape(ctx, g.input, params, Math.random, { wet: g.wetIn, bedBus: g.bedBus, orbit: g.orbit, reverbSend: g.reverbSend });
+    this.scape = createSoundscape(ctx, g.input, params, Math.random, { wet: g.wetIn, bedBus: g.bedBus, orbit: g.orbit, reverbSend: g.reverbSend });
     const push = () => {
       const s = temporalStore.getSnapshot();
       if (s && this.scape) this.scape.update(s, ctx.currentTime);

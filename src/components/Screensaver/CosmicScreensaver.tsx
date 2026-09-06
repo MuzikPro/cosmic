@@ -22,7 +22,7 @@ import type { TemporalMeridianState, TemporalSoundscapeSettings, TimeSource, Ove
 import { TemporalOverlay } from './TemporalOverlay';
 import { liveAudio, LiveAudio, MASTER_MAX } from '@/audio/audioEngine';
 import { soundscapeController } from '@/audio/controller';
-import { vesselWeightsFromVisible } from '@/audio/vesselModulator';
+import { vesselWeightsFromVisible } from '@pack';
 import { TemporalDebugPanel, isDebugEnabled } from './TemporalDebugPanel';
 import type { SpatialMode } from '@/temporal/types';
 

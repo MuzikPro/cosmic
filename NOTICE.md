@@ -10,6 +10,7 @@ here.
 | Body mesh assets | `public/models/*.glb` | **CC BY 4.0** (see below) |
 | Sample content data (articles, formulas, acupoints, pulses, tongues, …) | `src/data/` | **CC BY-NC 4.0** (attribution, non-commercial) |
 | Commercial content pack (full 96 articles, 39 formulas, full 定位 texts, curriculum) | *not in this repository* — overlaid at deploy time | proprietary, all rights reserved |
+| Sound design pack (`cosmic-sound`: element characters, palettes, progression, cadence, vessel modulation, levels) | *not in this repository* — overlaid into `src/audio/pack/` at deploy time by `scripts/fetch-sound-pack.mjs`; `src/audio/fallback/` is the open reference pack | proprietary, all rights reserved |
 
 ## CC BY 4.0 assets — attribution
 

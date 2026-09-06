@@ -13,3 +13,6 @@ coverage/
 
 # worktree-local browser launch config
 .claude/
+
+# private sound pack (overlaid at build time, or cloned locally)
+src/audio/pack/
