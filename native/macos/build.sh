@@ -11,11 +11,18 @@ NAME=CosmicMeridian
 SRC="$(pwd)"
 OUT="$(mktemp -d /tmp/cosmic-saver.XXXXXX)"
 rm -rf build; mkdir -p build
+# Screen savers must be Mach-O *bundles* (like Apple's own), not dylibs — System Settings skips dylib
+# executables. swiftc can only emit dylibs, so compile to objects and link with clang -bundle; the Swift
+# runtime libraries are pulled in through the objects' autolink entries (toolchain path for the
+# static compatibility libs, SDK path for the system stubs).
+SDK="$(xcrun --sdk macosx --show-sdk-path)"
+TOOLCHAIN_SWIFT="$(dirname "$(xcrun -f swiftc)")/../lib/swift/macosx"
 for ARCH in arm64 x86_64; do
-  swiftc -O -swift-version 5 -target "$ARCH-apple-macos12.0" -parse-as-library -module-name "$NAME" \
-    -emit-library -o "$OUT/$NAME-$ARCH" "$SRC"/Sources/*.swift \
+  swiftc -c -O -swift-version 5 -target "$ARCH-apple-macos12.0" -parse-as-library -module-name "$NAME" \
+    -o "$OUT/$NAME-$ARCH.o" "$SRC"/Sources/*.swift
+  clang -bundle -target "$ARCH-apple-macos12.0" -isysroot "$SDK" -o "$OUT/$NAME-$ARCH" "$OUT/$NAME-$ARCH.o" \
     -framework ScreenSaver -framework WebKit -framework AppKit \
-    -Xlinker -install_name -Xlinker "@executable_path/../MacOS/$NAME"
+    -L"$TOOLCHAIN_SWIFT" -L"$SDK/usr/lib/swift" -L/usr/lib/swift -Xlinker -rpath -Xlinker /usr/lib/swift
 done
 lipo -create -output "$OUT/$NAME" "$OUT/$NAME-arm64" "$OUT/$NAME-x86_64"
 B="$OUT/$NAME.saver/Contents"

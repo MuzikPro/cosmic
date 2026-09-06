@@ -2,6 +2,10 @@
 
 A `ScreenSaverView` hosting a `WKWebView`. Build with `./build.sh` (needs Xcode command-line
 tools; no Xcode project). Output: `build/CosmicMeridian.saver` and a zip in `../../release/`.
+The executable is linked as a Mach-O **bundle** (`clang -bundle` over swiftc objects) — System
+Settings ignores `.saver` bundles whose executable is a dylib, which is all `swiftc -emit-library`
+can produce. Assembly happens in a temp dir because Finder re-tags `.saver` folders inside
+Documents with metadata that strict `codesign` verification rejects.
 
 - **Source**: Online (the live site, always current) or Offline (the `dist-wallpaper` build bundled
   under `Resources/web`, made by `npm run build:wallpaper` first). Online falls back to Offline
