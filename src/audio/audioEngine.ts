@@ -129,7 +129,14 @@ export class LiveAudio {
   get state(): LiveState { return this._state; }
   get audioGraph(): AudioGraph | null { return this.graph; }
   subscribe = (fn: () => void): (() => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
-  private setState(s: LiveState): void { if (this._state !== s) { this._state = s; this.listeners.forEach((l) => l()); } }
+  private setState(s: LiveState): void {
+    if (this._state !== s) {
+      this._state = s;
+      // 宿主（macOS .saver）诊断用：页面侧可读的音频状态
+      try { (window as unknown as { __cosmicAudioState?: string }).__cosmicAudioState = s; } catch { /* no window */ }
+      this.listeners.forEach((l) => l());
+    }
+  }
 
   static supported(): boolean {
     return typeof window !== 'undefined' && ('AudioContext' in window || 'webkitAudioContext' in window);
@@ -154,7 +161,8 @@ export class LiveAudio {
       g.linearRampToValueAtTime(this.volume, t + FADE_SECONDS);
       this.syncState();
       return this.ctx.state === 'running';
-    } catch {
+    } catch (err) {
+      try { (window as unknown as { __cosmicAudioError?: string }).__cosmicAudioError = String(err); } catch { /* no window */ }
       this.setState('blocked');
       return false;
     }
