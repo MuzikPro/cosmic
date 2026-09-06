@@ -14,6 +14,23 @@ import os.log
 
 private let log = OSLog(subsystem: "com.3dqiflow.cosmic.saver", category: "saver")
 
+/// 宿主里 os_log 常常读不到（log show 漏、只能 stream），所以同时追加写一份文件日志：
+/// ~/Library/Logs/CosmicMeridian.log（在宿主的沙箱容器 home 下；用 find ~/Library/Containers -name CosmicMeridian.log 找）
+private let fileLogURL: URL = {
+    let dir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Logs", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("CosmicMeridian.log")
+}()
+private let logFormatter: DateFormatter = { let f = DateFormatter(); f.dateFormat = "HH:mm:ss.SSS"; return f }()
+private func flog(_ message: String) {
+    os_log("%{public}@", log: log, type: .default, message)
+    let line = "\(logFormatter.string(from: Date())) [\(ProcessInfo.processInfo.processName):\(getpid())] \(message)\n"
+    if let data = line.data(using: .utf8) {
+        if let h = try? FileHandle(forWritingTo: fileLogURL) { h.seekToEndOfFile(); h.write(data); try? h.close() }
+        else { try? data.write(to: fileLogURL) }
+    }
+}
+
 @objc(CosmicMeridianView)
 public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
     private static var audioOwnerAssigned = false
@@ -22,6 +39,9 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
     private var playsAudio = false
     private var triedOffline = false
     private var watchdog: Timer?
+    private var mouseOrigin: NSPoint?
+    private var startedAt = Date()
+    private var stopObserver: NSObjectProtocol?
     // 影像中继（macOS 14+）：legacyScreenSaver 宿主里 WKWebView 的远程合成层显示为黑，
     // 声音却在——网页进程在跑。于是把网页画面按 ~24 fps 快照到本视图的图层上。
     // 可用 defaults -currentHost write com.3dqiflow.cosmic.saver relay -bool false 关闭。
@@ -44,9 +64,13 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         wantsLayer = true
         layer?.backgroundColor = NSColor(red: 0.06, green: 0.06, blue: 0.10, alpha: 1).cgColor
         // audio ownership is decided in startAnimation, once the view's real size and screen are known
-        os_log("init frame=%{public}@ isPreview=%{public}d", log: log, type: .default, NSStringFromRect(frame), isPreview ? 1 : 0)
+        flog("init frame=\(NSStringFromRect(frame)) isPreview=\(isPreview)")
+        // 系统屏保结束的广播：宿主不一定调 stopAnimation，这里兜底拆除
+        stopObserver = DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("com.apple.screensaver.didstop"), object: nil, queue: .main) { [weak self] _ in
+            flog("screensaver.didstop notification → teardown"); self?.teardown()
+        }
     }
-    deinit { teardown() }
+    deinit { teardown(); if let o = stopObserver { DistributedNotificationCenter.default().removeObserver(o) } }
 
     /** 真正的屏保视图铺满一块屏幕；System Settings 的预览格子很小（且 isPreview 可能为 false） */
     private var fillsAScreen: Bool {
@@ -65,16 +89,15 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
             CosmicMeridianView.audioOwnerAssigned = true
             playsAudio = true
         }
-        os_log("startAnimation bounds=%{public}@ window=%{public}@ screen=%{public}@ fills=%{public}d audio=%{public}d visible=%{public}d",
-               log: log, type: .default, NSStringFromSize(bounds.size), window.map { NSStringFromRect($0.frame) } ?? "nil",
-               (window?.screen ?? NSScreen.main).map { NSStringFromRect($0.frame) } ?? "nil", fillsAScreen ? 1 : 0, playsAudio ? 1 : 0, (window?.isVisible ?? false) ? 1 : 0)
+        startedAt = Date(); mouseOrigin = NSEvent.mouseLocation
+        flog("startAnimation bounds=\(NSStringFromSize(bounds.size)) window=\(window.map { NSStringFromRect($0.frame) } ?? "nil") fills=\(fillsAScreen) audio=\(playsAudio) source=\(defaults.string(forKey: "source") ?? "?") relay=\(defaults.bool(forKey: "relay"))")
         if webView == nil { buildWebView() }
         if !playsAudio && fillsAScreen {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
                 guard let self = self, self.webView != nil, !CosmicMeridianView.audioOwnerAssigned else { return }
                 CosmicMeridianView.audioOwnerAssigned = true
                 self.playsAudio = true
-                os_log("audio fallback claimed by non-primary instance", log: log, type: .default)
+                flog("audio fallback claimed by non-primary instance")
                 if let wv = self.webView { self.load(into: wv, offline: self.triedOffline) }
             }
         }
@@ -82,7 +105,7 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
     }
     public override func stopAnimation() {
         super.stopAnimation()
-        os_log("stopAnimation", log: log, type: .default)
+        flog("stopAnimation")
         teardown()
     }
     public override func viewDidMoveToWindow() {
@@ -99,7 +122,13 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
             guard let self = self else { return }
             let gone = self.window == nil || self.isHiddenOrHasHiddenAncestor
             self.strikes = gone ? self.strikes + 1 : 0
-            if self.strikes >= 2 { os_log("watchdog teardown (window=%{public}d hidden=%{public}d)", log: log, type: .default, self.window == nil ? 0 : 1, self.isHiddenOrHasHiddenAncestor ? 1 : 0); self.teardown() }
+            if self.strikes >= 2 { flog("watchdog teardown (window=\(self.window != nil) hidden=\(self.isHiddenOrHasHiddenAncestor))"); self.teardown(); return }
+            // 出声的实例：屏保本该在鼠标一动就结束；System Settings 的全屏预览结束后却不通知我们，
+            // 所以 3 s 宽限后鼠标移动超过 30 px 即拆除（真屏保里宿主早已先调 stopAnimation）
+            if self.playsAudio, Date().timeIntervalSince(self.startedAt) > 3, let o = self.mouseOrigin {
+                let m = NSEvent.mouseLocation
+                if hypot(m.x - o.x, m.y - o.y) > 30 { flog("mouse moved while audio instance alive → teardown"); self.teardown() }
+            }
         }
     }
     public override func animateOneFrame() {
@@ -116,7 +145,15 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
             CATransaction.commit()
             self.snapshotsDelivered += 1
             if self.snapshotsDelivered == 1 || self.snapshotsDelivered % 240 == 0 {
-                os_log("relay snapshot #%{public}d %{public}dx%{public}d", log: log, type: .default, self.snapshotsDelivered, cg.width, cg.height)
+                flog("relay snapshot #\(self.snapshotsDelivered) \(cg.width)x\(cg.height)")
+            }
+            // 诊断：第 48 帧（≈2 s）落一张 PNG 到日志目录，用来核对宿主里快照到底画了什么
+            if self.snapshotsDelivered == 48 || self.snapshotsDelivered == 480 {
+                let rep = NSBitmapImageRep(cgImage: cg)
+                if let png = rep.representation(using: .png, properties: [:]) {
+                    let url = fileLogURL.deletingLastPathComponent().appendingPathComponent("CosmicMeridian-frame-\(self.snapshotsDelivered).png")
+                    try? png.write(to: url); flog("frame dumped: \(url.path)")
+                }
             }
         }
     }
@@ -135,6 +172,14 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
         wv.setValue(false, forKey: "drawsBackground")
+        // 私有开关：远程宿主里的窗口在 WebKit 眼中常常"被遮挡/不可见"，页面因此停掉 rAF 与音频；关闭遮挡探测
+        let sel = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+        if wv.responds(to: sel) {
+            let imp = wv.method(for: sel)
+            typealias Fn = @convention(c) (AnyObject, Selector, Bool) -> Void
+            unsafeBitCast(imp, to: Fn.self)(wv, sel, false)
+            flog("window occlusion detection disabled")
+        } else { flog("_setWindowOcclusionDetectionEnabled: not available") }
         addSubview(wv)
         webView = wv
         if defaults.bool(forKey: "relay") {
@@ -167,10 +212,32 @@ public final class CosmicMeridianView: ScreenSaverView, WKNavigationDelegate {
         }
     }
     // Offline fallback when the network is unavailable
-    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { os_log("provisional load failed: %{public}@", log: log, type: .error, error.localizedDescription); fallback() }
-    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { os_log("load failed: %{public}@", log: log, type: .error, error.localizedDescription); fallback() }
-    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { os_log("loaded %{public}@", log: log, type: .default, webView.url?.absoluteString ?? "?") }
-    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { os_log("web content process terminated — reloading", log: log, type: .error); load(into: webView, offline: triedOffline) }
+    public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { flog("provisional load failed: \(error.localizedDescription)"); fallback() }
+    public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { flog("load failed: \(error.localizedDescription)"); fallback() }
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        flog("loaded \(webView.url?.absoluteString ?? "?")")
+        // 页面侧诊断：画布、WebGL 渲染器、启动错误覆盖层、音频状态（延迟 4 s 与 12 s 各取一次）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) { [weak webView] in
+            guard let wv = webView else { return }
+            wv.callAsyncJavaScript("return await new Promise(r=>{let n=0;const t0=performance.now();function f(){n++;if(performance.now()-t0<1000)requestAnimationFrame(f);else r(n);}requestAnimationFrame(f);setTimeout(()=>r(-n),1500);});",
+                                   arguments: [:], in: nil, in: .page) { res in
+                switch res { case .success(let v): flog("rAF frames in 1 s: \(v)"); case .failure(let e): flog("rAF probe failed: \(e.localizedDescription)") }
+            }
+        }
+        for delay in [4.0, 12.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self, weak webView] in
+                guard self != nil, let wv = webView else { return }
+                wv.evaluateJavaScript("""
+                (()=>{try{const c=document.querySelector('canvas');const gl=c&&(c.getContext('webgl2')||c.getContext('webgl'));const ext=gl&&gl.getExtension('WEBGL_debug_renderer_info');
+                return JSON.stringify({canvas:!!c,size:c?[c.width,c.height]:null,renderer:gl?gl.getParameter(ext?ext.UNMASKED_RENDERER_WEBGL:gl.RENDERER):null,
+                root:document.getElementById('root')?.children.length,bootError:!!document.getElementById('boot-error'),audio:window.__cosmicAudioState||null,audioErr:window.__cosmicAudioError||null,
+                bundle:(document.querySelector('script[type=module]')||document.querySelector('script[src]'))?.getAttribute('src'),ls:(()=>{try{const t=JSON.parse(localStorage.getItem('3dqiflow:screensaver')||'{}').temporal;return t?{on:t.enabled,vol:t.masterVolume}:null}catch(e){return 'x'}})(),
+                lost:c?c.getContext('webgl2')?.isContextLost():null,vis:document.visibilityState,hidden:document.hidden,fps:window.__cosmicFps??null,q:location.search});}catch(e){return 'diag error: '+e}})()
+                """) { r, e in flog("page@\(Int(delay))s: \(r ?? "nil") \(e.map { "err=\($0.localizedDescription)" } ?? "")") }
+            }
+        }
+    }
+    public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { flog("web content process terminated — reloading"); load(into: webView, offline: triedOffline) }
     private func fallback() {
         guard let wv = webView, !triedOffline, offlineIndex() != nil else { return }
         load(into: wv, offline: true)
