@@ -682,5 +682,9 @@ export const EN: Record<string, string> = {
   '完全': 'Full',
   '奇经调制': 'Vessel modulation',
   '奇经不配五音；它们只改变声场的深度、亮度、脉动与环绕（本应用的艺术化设定）。显示中的奇经作用更强。': 'The extraordinary vessels get no tones; they only shape the field — depth, brightness, pulse, orbit (an artistic mapping of this app). Vessels shown on the body act more strongly.',
+  '减少动态': 'Reduce motion',
+  '省电模式': 'Power saver',
+  '系统偏好': 'system preference',
+  '电池': 'on battery',
   '五音是相对的调式功能，整个音景可整体移调；参考值不代表史实音高。': 'The Five Tones are relative modal functions; the whole soundscape transposes together. The reference value is not a historical pitch.'
 };

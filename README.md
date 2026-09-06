@@ -18,6 +18,10 @@ display, or full-screen as a screensaver.
   field of view 25–70°.
 - **Ambient UI** — the ⚙ and ⛶ controls fade after 4 s of stillness; the cursor hides.
   Drag to look around when "Manual interaction" is on; it eases back into motion.
+- **Reduce motion / power saver** — ⚙ → Display. *Reduce motion* halves camera and rotation
+  speed and drops the pitch/roll drift (Auto follows the system "reduce motion" preference).
+  *Power saver* renders at device-pixel-ratio 1 and ~30 fps (Auto turns on when a laptop is
+  on battery, Chromium only). Nothing is reported anywhere; both are local checks.
 - **Stays awake** — while the page is visible it holds a Screen Wake Lock (where the
   browser supports it), so the display doesn't sleep under it. Close the tab to release.
 - **Fits any screen** — portrait phones and tablets frame the whole body width-first;
@@ -55,8 +59,13 @@ choices. Nothing here treats, diagnoses, or "activates" anything.
   fullscreen without browser chrome (web app manifest, `display: fullscreen`).
 - **macOS desktop wallpaper** — [Plash](https://github.com/sindresorhus/Plash) (free, open
   source) shows any URL as your wallpaper: add `https://cosmic.3dqiflow.com`.
-- **Windows** — [Lively Wallpaper](https://github.com/rocksdanister/lively) (free, open
-  source): *Add wallpaper → URL*. Wallpaper Engine users: *Open wallpaper → Web page*.
+- **Windows, offline** — download `cosmic-meridian-wallpaper-<version>.zip` from
+  [Releases](https://github.com/MuzikPro/cosmic/releases) (or run `npm run build:wallpaper`).
+  It is a self-contained folder with `project.json` (Wallpaper Engine) and `LivelyInfo.json`
+  (Lively). **Wallpaper Engine**: unzip into `…/wallpaper_engine/projects/myprojects/cosmic-meridian/`
+  and pick it under *Installed*; view mode, flow speed, opacity, Time & Sound, volume, overlay
+  and power saver are exposed as wallpaper properties, and sound autoplays there.
+  **Lively**: *Add wallpaper* → choose the folder or zip. Both also accept the live URL instead.
 - **Kiosk / wall display** — any Chromium in `--kiosk https://cosmic.3dqiflow.com`; a
   Raspberry Pi 4/5 runs it at 1080p.
 - Native screensaver wrappers (macOS `.saver`, Electron) are on the wish-list — PRs welcome.

@@ -9,6 +9,8 @@ export type ViewMode = 'cameraOrbit' | 'bodyRotation' | 'combined';
 export type OrbitStyle = 'horizontal' | 'elevated' | 'spherical' | 'free';
 export type AxisMode = 'y' | 'x' | 'z' | 'xyzDrift' | 'custom';
 export type RotationRange = 360 | 180 | 90 | 45;
+/** 动态与功耗（owner 2026-09-05）：auto 跟随系统"减少动态效果"偏好 / 电池状态 */
+export type TriState = 'auto' | 'on' | 'off';
 
 export interface ScreensaverSettings {
   mode: ViewMode;
@@ -34,6 +36,10 @@ export interface ScreensaverSettings {
   visible: string[];
   /** 时间与声音（时辰经络音景，owner 2026-09-05）：默认关闭；关闭时不影响原有无时间维度的演示 */
   temporal: TemporalSoundscapeSettings;
+  /** 减少动态：镜头/自转速度与起伏减半，三轴漂移只留偏航；auto = 跟随 prefers-reduced-motion */
+  reducedMotion: TriState;
+  /** 省电：像素比 1、约 30 fps；auto = 用电池（未充电）时开启 */
+  powerSaver: TriState;
 }
 
 export const ALL_MERIDIANS = [...TWELVE, ...VESSELS_EIGHT];
@@ -47,7 +53,9 @@ export const DEFAULT_SETTINGS: ScreensaverSettings = {
   bodyRotation: { speed: 0.25, axisMode: 'xyzDrift', yaw: 0, pitch: 0, roll: 0, range: 360 },
   manualInteraction: false,
   visible: TWELVE,  // 默认只显十二正经；奇经八脉在设置里勾选
-  temporal: DEFAULT_TEMPORAL_SETTINGS
+  temporal: DEFAULT_TEMPORAL_SETTINGS,
+  reducedMotion: 'auto',
+  powerSaver: 'auto'
 };
 
 const KEY = '3dqiflow:screensaver';
@@ -86,7 +94,9 @@ export function loadSettings(): ScreensaverSettings {
     visible: Array.isArray(raw.visible)
       ? ALL_MERIDIANS.filter((c) => (raw.visible as unknown[]).includes(c))
       : D.visible,
-    temporal: sanitizeTemporal(raw.temporal)
+    temporal: sanitizeTemporal(raw.temporal),
+    reducedMotion: pick(raw.reducedMotion, ['auto', 'on', 'off'] as const, D.reducedMotion),
+    powerSaver: pick(raw.powerSaver, ['auto', 'on', 'off'] as const, D.powerSaver)
   };
 }
 

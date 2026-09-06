@@ -1,12 +1,13 @@
 {
   "name": "cosmic-meridian",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/fetch-sound-pack.mjs",
     "build": "tsc --noEmit && vite build",
+    "build:wallpaper": "tsc --noEmit && VITE_WALLPAPER=1 vite build && node scripts/pack-wallpaper.mjs",
     "test": "vitest run",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

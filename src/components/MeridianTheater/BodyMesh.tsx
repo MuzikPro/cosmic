@@ -60,8 +60,10 @@ const ATLAS_FRAG = /* glsl */ `
 // 指纹由 scripts/stamp-model.py 在重建网格后写入。
 const MODEL_VERSION = 'ac180c470b';
 const MODEL_VERSION_F = 'e0babc992b';
-const MODEL_URL = `/models/body-skin.glb?v=${MODEL_VERSION}`;
-const MODEL_URL_F = `/models/body-skin-f.glb?v=${MODEL_VERSION_F}`;
+// 相对 Vite base 取模型：默认 base '/' 时与从前完全一致；打包成本地壁纸（base './'，file:// 运行）时也能找到
+const PUBLIC_BASE = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`;
+const MODEL_URL = `${PUBLIC_BASE}models/body-skin.glb?v=${MODEL_VERSION}`;
+const MODEL_URL_F = `${PUBLIC_BASE}models/body-skin-f.glb?v=${MODEL_VERSION_F}`;
 
 /** 男/女体表。两具都来自 NIH 3D / Visible Human，同一套归一化（脚底 y=-3.2、头顶 y=3.5）。 */
 export type BodySex = 'male' | 'female';

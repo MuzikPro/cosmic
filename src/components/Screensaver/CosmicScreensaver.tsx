@@ -25,6 +25,9 @@ import { soundscapeController } from '@/audio/controller';
 import { vesselWeightsFromVisible } from '@pack';
 import { TemporalDebugPanel, isDebugEnabled } from './TemporalDebugPanel';
 import type { SpatialMode } from '@/temporal/types';
+import { useEnvironment } from './useEnvironment';
+import { IS_WALLPAPER_BUILD, installWallpaperHost } from './wallpaperHost';
+import type { TriState } from './screensaverSettings';
 
 /**
  * 宇宙经络 · 屏保（owner 2026-09-05）——一具透明人体悬在星空中央，十二正经与
@@ -52,11 +55,13 @@ const MAIN_SITE = 'https://www.3dqiflow.com/';
 const easeInOut = (x: number) => (x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2);
 
 /** 逐帧驱动：镜头环绕 / 人体自转、手动交互后的柔和接回、视场角 */
-function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
+function Driver({ settingsRef, rigRef, manualRef, controlsRef, calmRef }: {
   settingsRef: React.MutableRefObject<ScreensaverSettings>;
   rigRef: React.RefObject<THREE.Group>;
   manualRef: React.MutableRefObject<{ active: boolean; endedAt: number; resume: number }>;
   controlsRef: React.RefObject<{ target: THREE.Vector3; enabled: boolean; update: () => void }>;
+  /** 减少动态生效时为 true：速度与起伏减半，漂移只留偏航 */
+  calmRef: React.MutableRefObject<boolean>;
 }) {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
   const size = useThree((s) => s.size);
@@ -74,6 +79,7 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
     t.current += dt;
     const s = settingsRef.current;
     const m = manualRef.current;
+    const calm = calmRef.current ? 0.5 : 1;
 
     if (camera.fov !== s.camera.fov) { camera.fov = s.camera.fov; camera.updateProjectionMatrix(); }
 
@@ -84,17 +90,17 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
     let elev = s.camera.elevation;
     let thetaNow: number;
     if (s.mode !== 'bodyRotation') {
-      const rate = s.camera.orbitSpeed * (TWO_PI / 40);      // 1.0x ＝ 40 秒一周；0.1x ＝ 400 秒
+      const rate = s.camera.orbitSpeed * calm * (TWO_PI / 40);   // 1.0x ＝ 40 秒一周；0.1x ＝ 400 秒
       theta.current += dt * rate;
       thetaNow = theta.current;
       const drift = Math.sin(t.current * 0.05);              // ~2 分钟一个起伏周期
       switch (s.camera.orbitStyle) {
         case 'horizontal': break;
         case 'elevated': elev = Math.min(75, elev + 25); break;
-        case 'spherical': elev = elev + s.camera.inclination * drift; break;
+        case 'spherical': elev = elev + s.camera.inclination * calm * drift; break;
         case 'free':
-          elev = elev + s.camera.inclination * drift * 1.3;
-          thetaNow += 0.35 * Math.sin(t.current * 0.031);
+          elev = elev + s.camera.inclination * calm * drift * 1.3;
+          thetaNow += 0.35 * calm * Math.sin(t.current * 0.031);
           break;
       }
     } else {
@@ -128,7 +134,7 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
     if (rig) {
       if (s.mode !== 'cameraOrbit') {
         const b = s.bodyRotation;
-        const rate = b.speed * (TWO_PI / 40);
+        const rate = b.speed * calm * (TWO_PI / 40);
         spin.current += dt * rate;
         const sweep = b.range === 360 ? spin.current : (b.range / 2) * D2R * Math.sin(spin.current);
         let yaw = 0, pitch = 0, roll = 0;
@@ -138,8 +144,8 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
           case 'z': roll = sweep; break;
           case 'xyzDrift':
             yaw = sweep;
-            pitch = 0.16 * Math.sin(t.current * 0.07);
-            roll = 0.07 * Math.sin(t.current * 0.05 + 1.3);
+            pitch = calm < 1 ? 0 : 0.16 * Math.sin(t.current * 0.07);
+            roll = calm < 1 ? 0 : 0.07 * Math.sin(t.current * 0.05 + 1.3);
             break;
           case 'custom':
             yaw = b.yaw * D2R + sweep;
@@ -157,6 +163,25 @@ function Driver({ settingsRef, rigRef, manualRef, controlsRef }: {
       if (Math.abs(rig.scale.x - sc) > 1e-4) rig.scale.setScalar(sc);
     }
   });
+  return null;
+}
+
+/** 省电：像素比 1、按需帧循环 + 30 Hz 触发（≈ 半数 GPU 工作）；关闭时恢复 always / [1,1.5] */
+function PowerDriver({ saver }: { saver: boolean }) {
+  const setDpr = useThree((s) => s.setDpr);
+  const setFrameloop = useThree((s) => s.setFrameloop);
+  const invalidate = useThree((s) => s.invalidate);
+  useEffect(() => {
+    if (saver) {
+      setDpr(1);
+      setFrameloop('demand');
+      const id = window.setInterval(() => invalidate(), 1000 / 30);
+      return () => { window.clearInterval(id); setFrameloop('always'); setDpr(Math.min(1.5, window.devicePixelRatio || 1)); };
+    }
+    setDpr(Math.min(1.5, window.devicePixelRatio || 1));
+    setFrameloop('always');
+    return undefined;
+  }, [saver, setDpr, setFrameloop, invalidate]);
   return null;
 }
 
@@ -434,9 +459,11 @@ function TimeAndSoundSection({ t, setT }: { t: TemporalSoundscapeSettings; setT:
   );
 }
 
-function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang, standaloneLink }: {
+function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang, standaloneLink, envNote }: {
   lang: 'en' | 'zh';
   standaloneLink: boolean;
+  /** 自动档当前生效的原因提示，如 " · 电池" */
+  envNote: { calm: string; saver: string };
   s: ScreensaverSettings; set: (patch: (d: ScreensaverSettings) => ScreensaverSettings) => void;
   fullscreen: boolean; onFullscreen: () => void; onReset: () => void;
 }) {
@@ -531,6 +558,14 @@ function SettingsPanel({ s, set, fullscreen, onFullscreen, onReset, lang, standa
       </Row>
       <Row label={tr('视场角')}><Slider value={s.camera.fov} min={25} max={70} step={1} format={deg}
         onChange={(v) => set((d) => ({ ...d, camera: { ...d.camera, fov: v } }))} /></Row>
+      <Row label={`${tr('减少动态')}${envNote.calm}`}>
+        <Choice<TriState> value={s.reducedMotion} onChange={(v) => set((d) => ({ ...d, reducedMotion: v }))}
+          options={[['auto', tr('自动')], ['on', tr('开')], ['off', tr('关')]]} />
+      </Row>
+      <Row label={`${tr('省电模式')}${envNote.saver}`}>
+        <Choice<TriState> value={s.powerSaver} onChange={(v) => set((d) => ({ ...d, powerSaver: v }))}
+          options={[['auto', tr('自动')], ['on', tr('开')], ['off', tr('关')]]} />
+      </Row>
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
         <button style={{ ...toggleButtonStyle(fullscreen), fontSize: '10px', padding: '2px 8px' }} onClick={onFullscreen}>
           {fullscreen ? tr('退出全屏') : tr('全屏')}
@@ -571,6 +606,12 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
   const emphasisRefs = useMemo<EmphasisRefs>(() => new Map(ALL_MERIDIANS.map((c) => [c, { v: 1 }])), []);
 
   // ── 时辰引擎：只在开启时计时；离开屏保时彻底停掉 ──
+  // ── 动态与功耗：auto 跟随系统偏好 / 电池 ──
+  const env = useEnvironment();
+  const calm = settings.reducedMotion === 'on' || (settings.reducedMotion === 'auto' && env.prefersReducedMotion);
+  const saver = settings.powerSaver === 'on' || (settings.powerSaver === 'auto' && env.onBattery);
+  const calmRef = useRef(calm); calmRef.current = calm;
+
   const tcfg = settings.temporal;
   const [debugOffset, setDebugOffset] = useState(0);   // 调试面板的临时时间偏移；不持久化
   const debug = isDebugEnabled();
@@ -598,6 +639,9 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
   }, [tcfg.musicDensity, tcfg.tonalCenterMidi, tcfg.octaveBias, vessels, tcfg.spatialMode]);
   useEffect(() => { liveAudio.setVolume(tcfg.masterVolume); }, [tcfg.masterVolume]);
   useEffect(() => {
+    if (IS_WALLPAPER_BUILD && tcfg.enabled && audioState !== 'running' && LiveAudio.supported()) void liveAudio.start(tcfg.masterVolume);
+  }, [tcfg.enabled]);   // eslint-disable-line react-hooks/exhaustive-deps -- 只在开启时试一次；被拦则角标照常
+  useEffect(() => {
     const onVis = () => { void liveAudio.onVisibility(document.visibilityState === 'visible'); };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
@@ -608,6 +652,8 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
     setSettings((d) => { const n = patch(d); saveSettings(n); return n; });
   }, []);
   const reset = () => { setSettings(DEFAULT_SETTINGS); saveSettings(DEFAULT_SETTINGS); };
+  // 本地壁纸宿主（Wallpaper Engine / Lively）：属性回调 → 设置
+  useEffect(() => installWallpaperHost(set), [set]);
 
   // ── 界面自动隐去：4 秒无指针动作淡出（含光标）；场景照常运行 ──
   const [uiVisible, setUiVisible] = useState(true);
@@ -681,8 +727,9 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
                     distance={lights.center.distance} decay={0} position={[0, 1, 4]} />
         <Starfield />
         <BodyRig rigRef={rigRef} opacity={settings.bodyOpacity} flowRef={flowRef.current} visible={settings.visible} emphasis={emphasisRefs} />
-        <Driver settingsRef={settingsRef} rigRef={rigRef} manualRef={manualRef} controlsRef={controlsRef} />
+        <Driver settingsRef={settingsRef} rigRef={rigRef} manualRef={manualRef} controlsRef={controlsRef} calmRef={calmRef} />
         <TemporalDriver refs={emphasisRefs} settingsRef={settingsRef} />
+        <PowerDriver saver={saver} />
         <OrbitControls
           ref={controlsRef as never}
           enabled={settings.manualInteraction}
@@ -739,7 +786,11 @@ export function CosmicScreensaver({ onExit, returnLabel }: { onExit?: () => void
       </div>
 
       {panelOpen && (
-        <SettingsPanel s={settings} set={set} fullscreen={fullscreen} onFullscreen={toggleFullscreen} onReset={reset} lang={lang === 'zh' ? 'zh' : 'en'} standaloneLink={!!onExit} />
+        <SettingsPanel s={settings} set={set} fullscreen={fullscreen} onFullscreen={toggleFullscreen} onReset={reset} lang={lang === 'zh' ? 'zh' : 'en'} standaloneLink={!!onExit}
+          envNote={{
+            calm: settings.reducedMotion === 'auto' && env.prefersReducedMotion ? ` · ${tr('系统偏好')}` : '',
+            saver: settings.powerSaver === 'auto' && env.onBattery ? ` · ${tr('电池')}` : ''
+          }} />
       )}
     </div>
   );

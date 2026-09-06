@@ -4,7 +4,12 @@ import legacy from '@vitejs/plugin-legacy';
 import { fileURLToPath, URL } from 'node:url';
 import { existsSync } from 'node:fs';
 
+// 本地壁纸构建（Wallpaper Engine / Lively，file:// 运行）：npm run build:wallpaper → base './'，产物在 dist-wallpaper/
+const wallpaper = process.env.VITE_WALLPAPER === '1';
+
 export default defineConfig({
+  base: wallpaper ? './' : '/',
+  build: wallpaper ? { outDir: 'dist-wallpaper', emptyOutDir: true } : undefined,
   // legacy: Vite 默认产物要求 Safari 14+，旧 iPad(iPadOS ≤13) 解析失败=白屏。
   // 转译 + polyfill 到 iOS/Safari 12；WebGL2(三维引擎硬要求)另在 index.html 显式提示。
   plugins: [react(), legacy({ targets: ['defaults', 'iOS >= 12', 'Safari >= 12'] })],

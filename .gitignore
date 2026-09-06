@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-wallpaper/
+release/
 dist-ssr/
 *.local
 .DS_Store
